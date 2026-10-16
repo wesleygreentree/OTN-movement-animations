@@ -1,15 +1,10 @@
-Animations of animal movements with R
+### Animations of animal movements with R
 
-For additional details/resources
-glatos: 
-https://rdrr.io/github/jsta/glatos/man/glatos.html
-https://github.com/ocean-tracking-network/glatos
+For additional details/resources glatos: <https://rdrr.io/github/jsta/glatos/man/glatos.html> <https://github.com/ocean-tracking-network/glatos>
 
-Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well):
-https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1
+Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well): <https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1>
 
-More information for making maps with R, with lots of example code:
-https://github.com/wesleygreentree/CSEE2024-R-maps
+More information for making maps with R, with lots of example code: <https://github.com/wesleygreentree/CSEE2024-R-maps>
 
 ```{r Setup}
 ## install packages that you don't already have:
@@ -33,47 +28,87 @@ library(stars)
 library(gganimate)
 library(ggnewscale)
 
+all.dets <- readRDS("C:/Users/wgree/OneDrive/Documents/Bottlenecks/acoustic_tagging/Ck-depth-dev/data/dev/all_dets_noVR100_20260520.RDS")
+
+qcs <- all.dets[grep("QCS", all.dets$station), ]
+
+
+
+bc.coast <- readRDS("data/bc-coast.RDS")
 dets <- readRDS("data/example-tags.RDS") 
+
+# select a group of tags that migrated north and generally stayed in the NSOG
 
 # If you receive this error, open Global Options > RMarkdown > Evaluate chunks in directory: select Project
 # Warning: cannot open compressed file 'data/example-tags.RDS', probable reason 'No such file or directory'Error in gzfile(file, "rb") : cannot open the connection
 ```
 
+#### 1. View detection data
+
+First, let's take make a simple map to show each fish's detections.
+
+A problem immediately jumps out: The movement tracks cross land.
+
 ```{r Static map to view detection data}
-north.america <- rnaturalearth::ne_countries(scale = "large", continent = "north america",
-                                             returnclass = "sf")
-
 ggplot() +
-  geom_line(data = dets,
-             aes(x = longitude, y = latitude, colour = tagname))
-
-
+  geom_sf(data = bc.coast) +
+  geom_path(data = dets,
+             aes(x = longitude, y = latitude, colour = tagname)) +
+  coord_sf(xlim = c(-128.5, -124), ylim = c(49.2, 51)) +
+  theme_bw()
 # Wes - remember to include receiver stations
 ```
 
+#### 2. Constrain movement tracks to stay in water
+
+We need to constrain the movement tracks to stay in the water.
+
+We will need a shapefile of the ocean. When animating the movements of coastal species in regions with complex coastlines, we need a very high resolution shapefile to ensure that movement tracks do not cross small islands or other coastal land masses.
+
+-   A very high resolution shapefile of Canada's oceans is available at <https://open.canada.ca/data/en/dataset/6c78fb2f-d23b-45b4-b3af-cc6f6cc4fff8>
+
+-   A medium resolution shapefile of the world's oceans is available at <https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-ocean/>
+
+If we only have access to a shapefile of land masses (e.g., `bc.coast`), we can convert that shapefile to an ocean shapefile, as follows:
+
+```{r Make ocean shapefile}
+# extract the coordinates of the area of the shapefile
+box <- data.frame(t(data.frame(st_bbox(bc.coast))))
+bc.poly <- st_sfc(st_polygon(list(cbind(
+  c(box$xmin, box$xmax, box$xmax, box$xmin, box$xmin),
+  c(box$ymin, box$ymin, box$ymax, box$ymax, box$ymin)))),
+  crs = 4326)
+
+# The sf package uses spherical geometry, but many of the shapefiles that we encounter in the real world (including bc.coast) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
+sf::sf_use_s2(FALSE) 
+
+# make an ocean shape file by inverting bc.coast
+bc.ocean <- st_difference(bc.poly, st_union(st_combine(bc.coast)))
+
+# view bc.ocean shapefile
+ggplot() +
+  geom_sf(data = bc.ocean, fill = "lightblue") +
+  coord_sf(xlim = c(-126, -124), ylim = c(49, 50))
+```
+
+Next, we will use `bc.ocean` to make a **transition layer**. A transition layer defines where a tagged animal's movement track can (water) and cannot go (land). We produce the transition layer with `glatos::make_transition()`.
+
 ```{r Make transition layer}
 
-# load shapefile
-ocean <- sf::read_sf("data/comox-ocean-shapefile.shp") 
-# this is a shapefile of the ocean, not of land. Can manually process a shapefile of land and invert it to be a shapefile of the ocean.
-# Want a very fine-scale shapefile, so that receivers close to shore don't end up on land
-# Full shapefile for Canadian waters is available from https://open.canada.ca/data/en/dataset/6c78fb2f-d23b-45b4-b3af-cc6f6cc4fff8 (want to crop using sf::st_crop() to only BC/study area to reduce run times)
 
-
-# view shapefile and straight-line paths between detections of each tag
-ggplot() +
-  geom_sf(data = ocean, fill = "lightblue") + 
-  geom_path(data = tags, aes(x = longitude, y = latitude, colour = tagname)) +
-  coord_sf(expand = FALSE)
-
-ocean2 <- sf::as_Spatial(ocean) # needs to be an sp SpatialPolygonsDataFrame
+bc.ocean <- sf::as_Spatial(bc.ocean) # glatos requires that the ocean layer be a Spatial
 
 ocean.trans <- glatos::make_transition3(ocean2, res = c(0.002, 0.002),
                                 epsg = 4326) # 0.002 decimal degrees
 #saveRDS(ocean.trans) # really useful to save this as an RDS object. For the larger study areas that we typically work in, it can take very long to create. The transition layer I use for the BC coast is 35 MB
 
 # visualize raster resolution
+bc.coast <- vect(bc.coast)
+dim(bc.coast)
+bc.rast <- rasterize(bc.coast)
+
 ocean.trans.terra <- terra::rast(ocean.trans$rast) 
+
 ggplot() +
   tidyterra::geom_spatraster(data = ocean.trans.terra) +
   geom_point(data = tags, aes(x = longitude, y = latitude), colour = "yellow")
