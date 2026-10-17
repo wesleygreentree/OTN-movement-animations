@@ -188,31 +188,42 @@ ggplot() +
         panel.background = element_rect(fill = "grey90"))
 ```
 
-```{r Animation}
+#### 4. Animation
+
+```{r Get satellite basemap for animation}
 # load in satellite basemap with the basemaps package
+options(tz="UTC")
 satellite <- basemaps::basemap_stars(ext = study.area.box,
   map_service = "esri", map_type = "world_imagery", map_res = 1)
+
 class(satellite) # stars: raster cubes (multiple raster layers)
 sf::st_crs(satellite) # 3857 (Web Mercator)
-satellite.rgb <- stars::st_rgb(satellite) # converts 3 satellite layers (RGB) to color
+satellite.rgb <- stars::st_rgb(satellite) # converts 3 satellite layers (RGB) to RGB colour
 
-# convert tracks from WGS 1984 to Web Mercator (CRS 3857)
-tracks <- sf::st_as_sf(tracks, coords = c("longitude", "latitude"), crs = st_crs(4326))
+ggplot() +
+  geom_stars(data = satellite.rgb)
+```
+```{r Prepare movement tracks for animation}
+# convert tracks from WGS 1984 to Web Mercator (CRS 3857) to match the satellite basemap
+tracks <- sf::st_as_sf(tracks, 
+  coords = c("longitude", "latitude"), crs = st_crs(4326))
 tracks <- sf::st_transform(tracks, crs = st_crs(3857))
-coords <- do.call(rbind, sf::st_geometry(tracks)) %>% 
-  as_tibble() %>% setNames(c("longitude","latitude")) # warning isn't an issue
-tracks <- cbind(tracks[1:3], coords)
 
-# make point disappear at the final detection, so it doesn't stay in the animation
+tracks <- cbind(tracks, data.frame(st_coordinates(tracks)))
+
+# Identify the last detection of each tag, so that we can improve visualization later
 tag.ids <- sort(unique(tracks$animal_id))
 tracks$eventID <- seq(1, nrow(tracks))
 
 last.det <- data.frame(matrix(NA, nrow = 0, ncol = 4))
-names(last.det) <- c("animal_id", "bin_timestamp", "record_type", "eventID")
+names(last.det) <- c("animal_id", "bin_timestamp", "record_type",
+                     "eventID")
+
 for (i in 1:length(tag.ids)) {
   tag.sub <- subset(tracks, animal_id == tag.ids[i])
   sub.last <- tail(tag.sub, 1)
-  out <- select(sub.last, animal_id, bin_timestamp, record_type, eventID)
+  out <- select(sub.last, animal_id, bin_timestamp, record_type,
+                eventID)
   last.det <- rbind(last.det, out)
 }
 
@@ -221,8 +232,8 @@ tracks$last_det[tracks$eventID %in% last.det$eventID] <- TRUE
 tracks$tag_det <- paste(tracks$animal_id, tracks$last_det)
 
 # example receiver locations: for actual study, use all the receivers not just those detecting tags of course
-dets <- subset(tracks, record_type == "detection")
-unique.det.locations <- dets %>% group_by(longitude, latitude) %>% tally() 
+str(tracks)
+tz(tracks$bin_timestamp)
 
 # make animation
 animation <- ggplot() +
@@ -231,21 +242,22 @@ animation <- ggplot() +
   coord_sf(expand = FALSE) +
   
   # receiver locations
-  geom_point(data = unique.det.locations,
-             aes(x = longitude, y = latitude), colour = "#F3E356") +
+  geom_point(data = stations,
+             aes(x = longitude, y = latitude),
+             colour = "#F3E356") +
   
   # tag tracks
   geom_path(data = tracks,
-            aes(x = longitude, y = latitude, 
+            aes(x = X, y = Y, 
                 group = animal_id, color = animal_id),
             alpha = 0.4, linewidth = 0.7) +
-  scale_color_manual(values = c("#5BBAF2", "#e3766e")) +
+  #scale_color_manual(values = c("#5BBAF2", "#e3766e")) +
   ggnewscale::new_scale_color() +
   geom_point(data = tracks, 
-            aes(x = longitude, y = latitude, 
+            aes(x = X, y = Y, 
                 group = animal_id, color = tag_det),
             size = 1.8) +
-  scale_color_manual(values = c("#5BBAF2", "transparent", "#e3766e", "transparent")) +
+  # scale_color_manual(values = c("#5BBAF2", "transparent", "#e3766e", "transparent")) +
   
   # animate
   gganimate::transition_reveal(bin_timestamp) +
@@ -259,9 +271,12 @@ animation <- ggplot() +
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
 
+options(tz="UTC")
+
 gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
-          width = 12, height = 12, units = "cm", res = 600, nframes = 200,
+          width = 12, height = 12, units = "cm", 
+          res = 600, nframes = 200,
           bg = "transparent") # this did work actually!
 # to initially check that the animation code works, I run with res = 100, nframes = 50 and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
