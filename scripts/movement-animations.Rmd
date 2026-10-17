@@ -1,12 +1,14 @@
 ### Animations of animal movements with R
 
+If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
+
 For additional details/resources glatos: <https://rdrr.io/github/jsta/glatos/man/glatos.html> <https://github.com/ocean-tracking-network/glatos>
 
 Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well): <https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1>
 
 More information for making maps with R, with lots of example code: <https://github.com/wesleygreentree/CSEE2024-R-maps>
 
-```{r Setup}
+```{r Install packages}
 ## install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "tidyverse", "basemaps", "gganimate",
                    "terra", "tidyterra",  "ggnewscale", "geosphere"))
@@ -17,7 +19,7 @@ install.packages("rnaturalearth")
 remotes::install_github("ocean-tracking-network/glatos") # works best if installed from OTN GitHub
 
 # load libraries
-library(tidyverse)
+library(ggplot2)
 library(glatos) 
 library(sf)
 library(terra)
@@ -27,7 +29,9 @@ library(geosphere)
 library(stars)
 library(gganimate)
 library(ggnewscale)
+```
 
+```{r Load data}
 all.dets <- readRDS("C:/Users/wgree/OneDrive/Documents/Bottlenecks/acoustic_tagging/Ck-depth-dev/data/dev/all_dets_noVR100_20260520.RDS")
 
 qcs <- all.dets[grep("QCS", all.dets$station), ]
@@ -36,6 +40,9 @@ qcs <- all.dets[grep("QCS", all.dets$station), ]
 
 bc.coast <- readRDS("data/bc-coast.RDS")
 dets <- readRDS("data/example-tags.RDS") 
+
+nova.scotia <- readRDS("data/nova-scotia.RDS")
+salmon.dets <- readRDS("Atlantic-salmon-detections.RDS") # move to data folder
 
 # select a group of tags that migrated north and generally stayed in the NSOG
 
@@ -51,10 +58,12 @@ A problem immediately jumps out: The movement tracks cross land.
 
 ```{r Static map to view detection data}
 ggplot() +
-  geom_sf(data = bc.coast) +
-  geom_path(data = dets,
-             aes(x = longitude, y = latitude, colour = tagname)) +
-  coord_sf(xlim = c(-128.5, -124), ylim = c(49.2, 51)) +
+  geom_sf(data = nova.scotia) +
+  geom_path(data = salmon.dets,
+             aes(x = decimalLongitude, y = decimalLatitude, colour = tagName),
+            show.legend = FALSE) +
+  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
+           expand = FALSE) +
   theme_bw()
 # Wes - remember to include receiver stations
 ```
@@ -73,8 +82,13 @@ If we only have access to a shapefile of land masses (e.g., `bc.coast`), we can 
 
 ```{r Make ocean shapefile}
 # extract the coordinates of the area of the shapefile
-box <- data.frame(t(data.frame(st_bbox(bc.coast))))
-bc.poly <- st_sfc(st_polygon(list(cbind(
+
+# WES
+# WES - maybe instead use the study area for faster computation
+# WES
+
+box <- data.frame(t(data.frame(st_bbox(nova.scotia))))
+nova.scotia.poly <- st_sfc(st_polygon(list(cbind(
   c(box$xmin, box$xmax, box$xmax, box$xmin, box$xmin),
   c(box$ymin, box$ymin, box$ymax, box$ymax, box$ymin)))),
   crs = 4326)
@@ -83,23 +97,37 @@ bc.poly <- st_sfc(st_polygon(list(cbind(
 sf::sf_use_s2(FALSE) 
 
 # make an ocean shape file by inverting bc.coast
-bc.ocean <- st_difference(bc.poly, st_union(st_combine(bc.coast)))
+ocean <- st_difference(nova.scotia.poly, st_union(st_combine(nova.scotia)))
 
 # view bc.ocean shapefile
 ggplot() +
-  geom_sf(data = bc.ocean, fill = "lightblue") +
-  coord_sf(xlim = c(-126, -124), ylim = c(49, 50))
+  geom_sf(data = ocean, fill = "lightblue")
 ```
 
-Next, we will use `bc.ocean` to make a **transition layer**. A transition layer defines where a tagged animal's movement track can (water) and cannot go (land). We produce the transition layer with `glatos::make_transition()`.
+Next, we will use `bc.ocean` to make a **transition layer**. A transition layer is a raster that defines where a tagged animal's movement track can (water) and cannot go (land). In other words, the transition layer is a grid of 1's and 0's that dictate where a movement track can and cannot go.
+
+We produce the transition layer with `glatos::make_transition()`. Since the transition layer is converting ocean polygons (called "vector data") to a grid (called "raster data"), we manually set the desired resolution of those grid cells.
 
 ```{r Make transition layer}
+# to speed up computation, we will limit bc.ocean to the area needed
 
+range(dets$longitude)
+range(dets$latitude)
 
-bc.ocean <- sf::as_Spatial(bc.ocean) # glatos requires that the ocean layer be a Spatial
+study.area.box <- st_bbox(c(xmin = -126, ymin = 49.4, xmax = -123, ymax = 49.), 
+                          crs = st_crs(4326))
 
-ocean.trans <- glatos::make_transition3(ocean2, res = c(0.002, 0.002),
+study.area.ocean <- st_crop(bc.ocean, study.area.box)
+
+bc.ocean <- sf::as_Spatial(bc.ocean) # glatos requires that the ocean layer be a SpatialPolygons
+class(bc.ocean)
+
+# Make translation layer.
+Sys.time()
+ocean.trans <- glatos::make_transition(bc.ocean, res = c(0.1, 0.1),
                                 epsg = 4326) # 0.002 decimal degrees
+Sys.time()
+plot(ocean.trans)
 #saveRDS(ocean.trans) # really useful to save this as an RDS object. For the larger study areas that we typically work in, it can take very long to create. The transition layer I use for the BC coast is 35 MB
 
 # visualize raster resolution
