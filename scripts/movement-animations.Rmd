@@ -1,12 +1,10 @@
 ### Animations of animal movements with R
 
+Animations of the movements of tagged animals provide helpful insights in telemetry studies. However, animations can be challenging to make. The goal of this workshop is to equip you with the coding skills needed to make animations of your studies.
+
+In this workshop, we will make animations of the movements of six juvenile Atlantic salmon (*Salmo salar*) in Passamaquody Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/data/repository/pbsm>). For more information about this study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (Salmo salar) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
+
 If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
-
-For additional details/resources glatos: <https://rdrr.io/github/jsta/glatos/man/glatos.html> <https://github.com/ocean-tracking-network/glatos>
-
-Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well): <https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1>
-
-More information for making maps with R, with lots of example code: <https://github.com/wesleygreentree/CSEE2024-R-maps>
 
 ```{r Install packages}
 ## install packages that you don't already have:
@@ -44,17 +42,27 @@ nova.scotia <- readRDS("data/nova-scotia.RDS")
 salmon.dets <- readRDS("data/Atlantic-salmon-detections.RDS") 
 names(salmon.dets)[21:22] <- c("longitude", "latitude")
 
+# Telemetry array in Passamaquoddy Bay in May 2021
 stations <- readRDS("data/receiver-metadata.RDS")
 ```
 
 #### 1. View detection data
 
-First, let's take make a simple map to show each fish's detections.
+First, let's take make a simple map to view the receiver array in Passamaquody Bay and view each fish's detections.
+
+```{r Static map to view receiver stations}
+ggplot() +
+  geom_sf(data = nova.scotia) +
+  geom_point(data = stations,
+            aes(x = longitude, y = latitude),
+            colour = "orange") +
+  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
+           expand = FALSE) +
+  theme_bw()
+  
+```
 
 A problem immediately jumps out: The movement tracks cross land.
-```{r Static map to view receiver stations}
-
-```
 
 ```{r Static map to view detection data}
 ggplot() +
@@ -226,7 +234,9 @@ tracks <- cbind(tracks, data.frame(st_coordinates(tracks)))
 
 stations <- sf::st_as_sf(stations,
   coords = c("longitude", "latitude"), crs = st_crs(4326))
+stations <- st_crop(stations, study.area.box)
 stations <- st_transform(stations, crs = st_crs(3857))
+# exclude stations outside of the study area (did not have detections of these six tags)
 
 # Identify the last detection of each tag, so that we can improve visualization later
 tag.ids <- sort(unique(tracks$animal_id))
@@ -255,6 +265,7 @@ tracks$bin_timestamp <- as_datetime(tracks$bin_timestamp)
 
 ```{r Make animation}
 animation <- ggplot() +
+  
   #satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
@@ -291,9 +302,9 @@ options(tz="UTC")
 gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
           width = 12, height = 12, units = "cm", 
-          res = 150, nframes = 100,
-          bg = "transparent") # this did work actually!
-# to initially check that the animation code works, I run with res = 100, nframes = 50 and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
+          res = 50, nframes = 500,
+          bg = "transparent")
+# to initially check that the animation code works, I run a low res version with fewer frames, and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
 ```
 
@@ -301,3 +312,7 @@ gganimate::anim_save("animations/example-animation.gif",
 
 
 ```
+
+For additional details/resources on glatos: <https://rdrr.io/github/jsta/glatos/man/glatos.html> <https://github.com/ocean-tracking-network/glatos>
+
+Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well): <https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1>
