@@ -20,6 +20,8 @@ remotes::install_github("ocean-tracking-network/glatos") # works best if install
 
 # load libraries
 library(ggplot2)
+library(dplyr)
+library(lubridate)
 library(glatos) 
 library(sf)
 library(terra)
@@ -97,14 +99,24 @@ nova.scotia.poly <- st_sfc(st_polygon(list(cbind(
 sf::sf_use_s2(FALSE) 
 
 # make an ocean shape file by inverting bc.coast
-ocean <- st_difference(nova.scotia.poly, st_union(st_combine(nova.scotia)))
+ocean <- st_difference(nova.scotia.poly,
+                       st_union(st_combine(nova.scotia)))
 
 # view ocean shapefile
 ggplot() +
   geom_sf(data = ocean, fill = "lightblue")
 
-# adds River
+# add Magaguadavic River to the ocean shapefile with sf::st_union()
+magaguadavic.river <- readRDS("data/Magaguadavic-River.RDS")
 
+water <- st_union(ocean, magaguadavic.river)
+
+# inspect that st_union() worked. There is no black seam between the start of the ocean and the river, which demonstrates a successful union.
+ggplot() +
+  geom_sf(data = water, fill = "lightblue")+
+  coord_sf(xlim = c(-66.92, -66.8), ylim = c(45.1, 45.2),
+           expand = FALSE) +
+  theme_bw()
 ```
 
 Next, we will use `bc.ocean` to make a **transition layer**. A transition layer is a raster that defines where a tagged animal's movement track can (water) and cannot go (land). In other words, the transition layer is a grid of 1's and 0's that dictate where a movement track can and cannot go.
@@ -117,76 +129,68 @@ We produce the transition layer with `glatos::make_transition()`. Since the tran
 range(salmon.dets$decimalLongitude)
 range(salmon.dets$decimalLatitude)
 
-study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85, xmax = -66.7,
-                            ymax = 45.3), crs = st_crs(4326))
+study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85,
+  xmax = -66.7, ymax = 45.3), crs = st_crs(4326))
 
-study.area.ocean <- st_crop(ocean, study.area.box)
-ggplot() + geom_sf(data = study.area.ocean, fill = "lightblue") +
-  geom_sf(data = mag.river, fill = "lightblue")
+study.area.water <- st_crop(water, study.area.box)
+ggplot() + geom_sf(data = study.area.water, fill = "lightblue")
 
-rivers <- read_sf("C:/Users/wgree/Downloads/lhy_000c16a_e/lhy_000c16a_e.shp")
-names(rivers)
-view(sort(unique(rivers$NAME)))
+study.area.water <- sf::as_Spatial(study.area.water) # glatos requires that the ocean layer be a SpatialPolygons object, rather than an sf object
+class(study.area.water)
 
-mag.river <- rivers[grep("Magaguadavic", rivers$NAME, ignore.case = TRUE), ]
-mag.river <- subset(rivers, HYDROUID %in% c(7780515))
-st_crs(mag.river)
-mag.river <- st_transform(mag.river, crs = st_crs(4326))
-
-ggplot() +
-  geom_sf(data = study.area.ocean, fill = "lightblue") +
-  geom_sf(data = mag.river, fill = "lightblue") +
-    coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
-           expand = FALSE) +
-  theme_bw()
-  
-```
-
-bc.ocean <- sf::as_Spatial(bc.ocean) # glatos requires that the ocean layer be a SpatialPolygons
-class(bc.ocean)
-
-# Make translation layer.
+# Make translation layer
 Sys.time()
-ocean.trans <- glatos::make_transition(bc.ocean, res = c(0.1, 0.1),
+water.trans <- glatos::make_transition(study.area.water, res = c(0.002, 0.002),
                                 epsg = 4326) # 0.002 decimal degrees
 Sys.time()
-plot(ocean.trans)
-#saveRDS(ocean.trans) # really useful to save this as an RDS object. For the larger study areas that we typically work in, it can take very long to create. The transition layer I use for the BC coast is 35 MB
+plot(water.trans$rast)
+
+#saveRDS(water.trans) # really useful to save this as an RDS object. For the larger study areas that we often work in, it can take very long to create.
 
 # visualize raster resolution
-bc.coast <- vect(bc.coast)
-dim(bc.coast)
-bc.rast <- rasterize(bc.coast)
-
-ocean.trans.terra <- terra::rast(ocean.trans$rast) 
+water.trans.terra <- terra::rast(water.trans$rast) 
 
 ggplot() +
-  tidyterra::geom_spatraster(data = ocean.trans.terra) +
-  geom_point(data = tags, aes(x = longitude, y = latitude), colour = "yellow")
+  tidyterra::geom_spatraster(data = water.trans.terra) +
+  geom_point(data = salmon.dets, aes(x = decimalLongitude, y = decimalLatitude), colour = "yellow")
 
 ggplot() +
-  tidyterra::geom_spatraster(data = ocean.trans.terra) +
-  geom_point(data = tags, aes(x = longitude, y = latitude), colour = "yellow") + 
-  coord_sf(expand = FALSE, xlim = c(-124.75, -124.6), ylim = c(49.45, 49.55))
+  tidyterra::geom_spatraster(data = water.trans.terra) +
+  geom_point(data = salmon.dets, aes(x = decimalLongitude, y = decimalLatitude), colour = "yellow") +
+  coord_sf(xlim = c(-66.92, -66.8), ylim = c(45.1, 45.2),
+           expand = FALSE)
 ```
 
-```{r Interpolate tracks to stay in water}
-# detection data in glatos format
-tags.glatos <- dplyr::select(tags, tagname, datetimeUTC, longitude, latitude)
-names(tags.glatos) <- c("animal_id", "detection_timestamp_utc", "deploy_long", "deploy_lat")
+#### 3. Interpolate movement tracks that stay in the water
 
-tracks <- glatos::interpolate_path(tags.glatos, 
-                           trans = ocean.trans$transition, 
-                           lnl_thresh = 2, int_time_stamp = 1800)
-# interpolates a position every hour. Can increase to every 6 hours, day etc... but larger time gaps between interpolation points increases the chance that an interpolated point is on land
-# takes a long time for 50-100 tags with 100,000s of detections. I run on the lab's 32 GB RAM desktop, can take 2 hours (may run faster in parallel). In some cases, will not run on my personal laptop (16 GB RAM).
-# can run in batches, e.g. only 10 tags at a time, if this is an issue
+We use the transition layer to interpolate movement tracks between detections and ensure the tracks stay in the water.
+
+```{r Interpolate tracks to stay in water}
+# First, let's convert the detection data into the format needed for glatos
+glatos.dets <- dplyr::select(salmon.dets, tagName, 
+  dateCollectedUTC, decimalLongitude, decimalLatitude)
+names(glatos.dets) <- c("animal_id", "detection_timestamp_utc",
+                        "deploy_long", "deploy_lat")
+glatos.dets$detection_timestamp_utc <- as_datetime(glatos.dets$detection_timestamp_utc)
+
+tracks <- glatos::interpolate_path(glatos.dets, 
+                           trans = water.trans$transition, 
+                           lnl_thresh = 2, int_time_stamp = 600)
+# int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 600 means one interpolated position per 300 seconds, or every 10 minutes)
+
+# with large data sets, the interpolation may not run on your personal laptop. To get around this, you can run the interpolation in batches (e.g., only 10 tags at a time). I split my dataset (~1 million detections) into a few batches and run on our lab's 32 GM RAM desktop. This takes about 2 hours with one interpolated position per hour.
 
 # view interpolated paths
 ggplot() +
-  geom_sf(data = ocean, fill = "lightblue") + 
-  geom_path(data = tracks, aes(x = longitude, y = latitude, color = animal_id)) +
-  coord_sf(expand = FALSE)
+  geom_sf(data = water, fill = "lightblue") + 
+  geom_path(data = tracks, 
+            aes(x = longitude, y = latitude, color = animal_id)) +
+  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2)) +
+  scale_x_continuous(breaks = c(-67.2, -67, -66.8)) +
+  scale_y_continuous(breaks = c(44.9, 45, 45.1, 45.2)) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        panel.background = element_rect(fill = "grey90"))
 ```
 
 ```{r Animation}
