@@ -41,8 +41,10 @@ library(ggnewscale)
 nova.scotia <- readRDS("data/nova-scotia.RDS")
 
 # Atlantic salmon detections
-salmon.dets <- readRDS("Atlantic-salmon-detections.RDS") # move to data folder
+salmon.dets <- readRDS("data/Atlantic-salmon-detections.RDS") 
 names(salmon.dets)[21:22] <- c("longitude", "latitude")
+
+stations <- readRDS("data/receiver-metadata.RDS")
 ```
 
 #### 1. View detection data
@@ -50,6 +52,9 @@ names(salmon.dets)[21:22] <- c("longitude", "latitude")
 First, let's take make a simple map to show each fish's detections.
 
 A problem immediately jumps out: The movement tracks cross land.
+```{r Static map to view receiver stations}
+
+```
 
 ```{r Static map to view detection data}
 ggplot() +
@@ -60,7 +65,6 @@ ggplot() +
   coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
            expand = FALSE) +
   theme_bw()
-# Wes - remember to include receiver stations
 ```
 
 #### 2. Constrain movement tracks to stay in water
@@ -123,22 +127,29 @@ range(salmon.dets$longitude)
 range(salmon.dets$latitude)
 
 study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85,
-  xmax = -66.7, ymax = 45.3), crs = st_crs(4326))
+  xmax = -66.7, ymax = 45.2), crs = st_crs(4326))
 
 study.area.water <- st_crop(water, study.area.box)
 ggplot() + geom_sf(data = study.area.water, fill = "lightblue")
 
+study.area.water <- read_sf("data/OSM-Passamaquody-Bay.shp")
+study.area.water <- st_union(study.area.water, 
+                             magaguadavic.river)
+ggplot() + geom_sf(data = study.area.water)
+
 study.area.water <- sf::as_Spatial(study.area.water) # glatos requires that the ocean layer be a SpatialPolygons object, rather than an sf object
 class(study.area.water)
 
+water <- as_Spatial(water)
+water.trans <- glatos::make_transition(water,
+  res = c(0.0005, 0.0005), epsg = 4326)
+
 # Make translation layer
-Sys.time()
-water.trans <- glatos::make_transition(study.area.water, res = c(0.002, 0.002),
-                                epsg = 4326) # 0.002 decimal degrees
-Sys.time()
+water.trans <- glatos::make_transition(study.area.water,
+  res = c(0.0005, 0.0005), epsg = 4326) # 0.001 decimal degrees
 plot(water.trans$rast)
 
-#saveRDS(water.trans) # really useful to save this as an RDS object. For the larger study areas that we often work in, it can take very long to create.
+#saveRDS(water.trans, "data/trans-layer.RDS") # really useful to save this as an RDS object. For the larger study areas that we often work in, it can take very long to create.
 
 # visualize raster resolution
 water.trans.terra <- terra::rast(water.trans$rast) 
@@ -168,7 +179,7 @@ glatos.dets$detection_timestamp_utc <- as_datetime(glatos.dets$detection_timesta
 
 tracks <- glatos::interpolate_path(glatos.dets, 
                            trans = water.trans$transition, 
-                           lnl_thresh = 2, int_time_stamp = 3600)
+                           lnl_thresh = 2, int_time_stamp = 180)
 # int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 1800 means one interpolated position per 3600 seconds, or every 60 minutes)
 
 # For this workshop, we are interpolating positions every 30 minutes for speed. If this were for my research, I would compare different int_time_stamp values.
@@ -201,8 +212,10 @@ sf::st_crs(satellite) # 3857 (Web Mercator)
 satellite.rgb <- stars::st_rgb(satellite) # converts 3 satellite layers (RGB) to RGB colour
 
 ggplot() +
-  geom_stars(data = satellite.rgb)
+  geom_stars(data = satellite.rgb) +
+  coord_sf()
 ```
+
 ```{r Prepare movement tracks for animation}
 # convert tracks from WGS 1984 to Web Mercator (CRS 3857) to match the satellite basemap
 tracks <- sf::st_as_sf(tracks, 
@@ -210,6 +223,10 @@ tracks <- sf::st_as_sf(tracks,
 tracks <- sf::st_transform(tracks, crs = st_crs(3857))
 
 tracks <- cbind(tracks, data.frame(st_coordinates(tracks)))
+
+stations <- sf::st_as_sf(stations,
+  coords = c("longitude", "latitude"), crs = st_crs(4326))
+stations <- st_transform(stations, crs = st_crs(3857))
 
 # Identify the last detection of each tag, so that we can improve visualization later
 tag.ids <- sort(unique(tracks$animal_id))
@@ -231,20 +248,19 @@ tracks$last_det <- FALSE
 tracks$last_det[tracks$eventID %in% last.det$eventID] <- TRUE
 tracks$tag_det <- paste(tracks$animal_id, tracks$last_det)
 
-# example receiver locations: for actual study, use all the receivers not just those detecting tags of course
-str(tracks)
-tz(tracks$bin_timestamp)
+# do I want to duplicate last det
 
-# make animation
+tracks$bin_timestamp <- as_datetime(tracks$bin_timestamp)
+```
+
+```{r Make animation}
 animation <- ggplot() +
   #satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
   
-  # receiver locations
-  geom_point(data = stations,
-             aes(x = longitude, y = latitude),
-             colour = "#F3E356") +
+  # # receiver locations
+  geom_sf(data = stations, colour = "#F3E356") +
   
   # tag tracks
   geom_path(data = tracks,
@@ -270,17 +286,18 @@ animation <- ggplot() +
         panel.background = element_rect(fill = "black"),
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
-
 options(tz="UTC")
 
 gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
           width = 12, height = 12, units = "cm", 
-          res = 600, nframes = 200,
+          res = 150, nframes = 100,
           bg = "transparent") # this did work actually!
 # to initially check that the animation code works, I run with res = 100, nframes = 50 and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
+```
 
-# note that the pink tag was only detected at the northwest receiver for the last few months, so the point remains present much longer than the blue point at its last location
+```{r Animations with images of fish}
+
 
 ```
