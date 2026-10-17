@@ -99,9 +99,12 @@ sf::sf_use_s2(FALSE)
 # make an ocean shape file by inverting bc.coast
 ocean <- st_difference(nova.scotia.poly, st_union(st_combine(nova.scotia)))
 
-# view bc.ocean shapefile
+# view ocean shapefile
 ggplot() +
   geom_sf(data = ocean, fill = "lightblue")
+
+# adds River
+
 ```
 
 Next, we will use `bc.ocean` to make a **transition layer**. A transition layer is a raster that defines where a tagged animal's movement track can (water) and cannot go (land). In other words, the transition layer is a grid of 1's and 0's that dictate where a movement track can and cannot go.
@@ -111,13 +114,33 @@ We produce the transition layer with `glatos::make_transition()`. Since the tran
 ```{r Make transition layer}
 # to speed up computation, we will limit bc.ocean to the area needed
 
-range(dets$longitude)
-range(dets$latitude)
+range(salmon.dets$decimalLongitude)
+range(salmon.dets$decimalLatitude)
 
-study.area.box <- st_bbox(c(xmin = -126, ymin = 49.4, xmax = -123, ymax = 49.), 
-                          crs = st_crs(4326))
+study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85, xmax = -66.7,
+                            ymax = 45.3), crs = st_crs(4326))
 
-study.area.ocean <- st_crop(bc.ocean, study.area.box)
+study.area.ocean <- st_crop(ocean, study.area.box)
+ggplot() + geom_sf(data = study.area.ocean, fill = "lightblue") +
+  geom_sf(data = mag.river, fill = "lightblue")
+
+rivers <- read_sf("C:/Users/wgree/Downloads/lhy_000c16a_e/lhy_000c16a_e.shp")
+names(rivers)
+view(sort(unique(rivers$NAME)))
+
+mag.river <- rivers[grep("Magaguadavic", rivers$NAME, ignore.case = TRUE), ]
+mag.river <- subset(rivers, HYDROUID %in% c(7780515))
+st_crs(mag.river)
+mag.river <- st_transform(mag.river, crs = st_crs(4326))
+
+ggplot() +
+  geom_sf(data = study.area.ocean, fill = "lightblue") +
+  geom_sf(data = mag.river, fill = "lightblue") +
+    coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
+           expand = FALSE) +
+  theme_bw()
+  
+```
 
 bc.ocean <- sf::as_Spatial(bc.ocean) # glatos requires that the ocean layer be a SpatialPolygons
 class(bc.ocean)
