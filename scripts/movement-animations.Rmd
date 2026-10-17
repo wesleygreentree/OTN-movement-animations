@@ -34,11 +34,20 @@ library(geosphere)
 library(stars)
 library(gganimate)
 library(ggnewscale)
+
+# The sf package uses spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
+sf::sf_use_s2(FALSE) 
 ```
 
 ```{r Load data}
 # basemap of Nova Scotia and New Brunswick
 nova.scotia <- readRDS("data/nova-scotia.RDS")
+
+# Passamaquoddy Bay shapefile
+passamaquoddy.bay <- readRDS
+
+# Magaguadavic River shapefile
+magaguadavic.river <- readRDS("data/Magaguadavic-River.RDS")
 
 # Atlantic salmon detections
 salmon.dets <- readRDS("data/Atlantic-salmon-detections.RDS") 
@@ -48,9 +57,9 @@ names(salmon.dets)[21:22] <- c("longitude", "latitude")
 stations <- readRDS("data/receiver-metadata.RDS")
 ```
 
-#### 1. View detection data
+#### 1. View receiver array and detection data
 
-First, let's take make a simple map to view the receiver array in Passamaquoddy Bay and view each fish's detections.
+First, let's take make simple maps to view the receiver array in Passamaquoddy Bay and view each fish's detections.
 
 ```{r Static map to view receiver stations}
 ggplot() +
@@ -64,7 +73,7 @@ ggplot() +
   
 ```
 
-A problem immediately jumps out: The movement tracks cross land.
+A problem immediately jumps out: Straight-line movement paths cross land.
 
 ```{r Static map to view detection data}
 ggplot() +
@@ -79,7 +88,7 @@ ggplot() +
 
 #### 2. Constrain movement tracks to stay in water
 
-We need to constrain the movement tracks to stay in the water.
+We need to force the movement tracks to stay in the water.
 
 We will need a shapefile of the ocean. When animating the movements of coastal species in regions with complex coastlines, we need a very high resolution shapefile to ensure that movement tracks do not cross small islands or other coastal land masses.
 
@@ -87,31 +96,9 @@ We will need a shapefile of the ocean. When animating the movements of coastal s
 
 -   A medium resolution shapefile of the world's oceans is available at <https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-ocean/>
 
-If we only have access to a shapefile of land masses (e.g., `bc.coast`), we can convert that shapefile to an ocean shapefile, as follows:
+We will use first option. However, if we only had access to a shapefile of land masses (e.g., `nova.scotia`), we can convert that shapefile to an ocean shapefile. See the code in Appendix A.
 
-```{r Make ocean shapefile}
-# extract the coordinates of the area of the shapefile
-
-# WES
-# WES - maybe instead use the study area for faster computation
-# WES
-
-box <- data.frame(t(data.frame(st_bbox(nova.scotia))))
-nova.scotia.poly <- st_sfc(st_polygon(list(cbind(
-  c(box$xmin, box$xmax, box$xmax, box$xmin, box$xmin),
-  c(box$ymin, box$ymin, box$ymax, box$ymax, box$ymin)))),
-  crs = 4326)
-
-# The sf package uses spherical geometry, but many of the shapefiles that we encounter in the real world (including bc.coast) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
-sf::sf_use_s2(FALSE) 
-
-# make an ocean shape file by inverting bc.coast
-ocean <- st_difference(nova.scotia.poly,
-                       st_union(st_combine(nova.scotia)))
-
-# view ocean shapefile
-ggplot() +
-  geom_sf(data = ocean, fill = "lightblue")
+```{r }
 
 # add Magaguadavic River to the ocean shapefile with sf::st_union()
 magaguadavic.river <- readRDS("data/Magaguadavic-River.RDS")
@@ -311,6 +298,28 @@ gganimate::anim_save("animations/example-animation.gif",
 
 ```{r Animations with images of fish}
 
+
+```
+
+```{r Appendix A - Derive an ocean shapefile from land}
+
+# extract the coordinates of the area of the shapefile
+box <- data.frame(t(data.frame(st_bbox(nova.scotia))))
+nova.scotia.poly <- st_sfc(st_polygon(list(cbind(
+  c(box$xmin, box$xmax, box$xmax, box$xmin, box$xmin),
+  c(box$ymin, box$ymin, box$ymax, box$ymax, box$ymin)))),
+  crs = 4326)
+
+# The sf package uses spherical geometry, but many of the shapefiles that we encounter in the real world (including bc.coast) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
+sf::sf_use_s2(FALSE) 
+
+# make an ocean shape file by inverting bc.coast
+ocean <- st_difference(nova.scotia.poly,
+                       st_union(st_combine(nova.scotia)))
+
+# view ocean shapefile
+ggplot() +
+  geom_sf(data = ocean, fill = "lightblue")
 
 ```
 
