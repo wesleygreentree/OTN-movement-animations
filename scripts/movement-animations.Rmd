@@ -1,8 +1,10 @@
 ### Animations of animal movements with R
 
-Animations of the movements of tagged animals provide helpful insights in telemetry studies. However, animations can be challenging to make. The goal of this workshop is to equip you with the coding skills needed to make animations of your studies.
+Animations of the movements of tagged animals provide helpful insights in telemetry studies. However, animations can be challenging to make. The goal of this workshop is to equip you with the coding skills needed to make animations of your telemetry studies.
 
-In this workshop, we will make animations of the movements of six juvenile Atlantic salmon (*Salmo salar*) in Passamaquody Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/data/repository/pbsm>). For more information about this study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (Salmo salar) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
+We will use the widely-used `ggplot2` and `sf` packages to make animations. `ggplot2` provides an easy way to producing beautiful data visualizations in R. The `gganimate` package allows to animate ggplots. Since we are using broadly-applicable R packages, you can extend this workshop's code to visualize data sets beyond acoustic telemetry data.
+
+In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/data/repository/pbsm>). For more information about this study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
 
 If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
 
@@ -48,7 +50,7 @@ stations <- readRDS("data/receiver-metadata.RDS")
 
 #### 1. View detection data
 
-First, let's take make a simple map to view the receiver array in Passamaquody Bay and view each fish's detections.
+First, let's take make a simple map to view the receiver array in Passamaquoddy Bay and view each fish's detections.
 
 ```{r Static map to view receiver stations}
 ggplot() +
@@ -140,7 +142,6 @@ study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85,
 study.area.water <- st_crop(water, study.area.box)
 ggplot() + geom_sf(data = study.area.water, fill = "lightblue")
 
-study.area.water <- read_sf("data/OSM-Passamaquody-Bay.shp")
 study.area.water <- st_union(study.area.water, 
                              magaguadavic.river)
 ggplot() + geom_sf(data = study.area.water)
