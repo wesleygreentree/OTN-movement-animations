@@ -2,7 +2,13 @@
 
 Animations of the movements of tagged animals provide helpful insights in telemetry studies. However, animations can be challenging to make. The goal of this workshop is to equip you with the coding skills needed to make animations of your telemetry studies.
 
-We will use the widely-used `ggplot2` and `sf` packages to make animations. `ggplot2` provides an easy way to producing beautiful data visualizations in R. The `gganimate` package allows to animate ggplots. Since we are using broadly-applicable R packages, you can extend this workshop's code to visualize data sets beyond acoustic telemetry data.
+These animations are facilitated by the `glatos` R package, produced by the [Great Lakes Acoustic Telemetry Observation System](glatos.org). The `glatos` R package was developed by Chris Holbrook, Todd Hayden, Thomas Binder, and Jon Pye. For more information on the `glatos` R package, refer to:
+
+-   <https://rdrr.io/github/jsta/glatos/man/glatos.html>
+
+-   <https://github.com/ocean-tracking-network/glatos>
+
+We will combine `glatos` with the widely-used `ggplot2` and `sf` packages to make animations. `ggplot2` provides an easy way to producing beautiful data visualizations in R. `sf`, along with the companion `terra` and `stars` packages, provides a unified approach to working with spatial data in R. The `gganimate` package allows to produce animated ggplots. Since we are using these broadly-applicable R packages, you can extend this workshop's code to visualize data sets beyond acoustic telemetry data.
 
 In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/data/repository/pbsm>). For more information about this study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
 
@@ -257,8 +263,6 @@ tracks$last_det <- FALSE
 tracks$last_det[tracks$eventID %in% last.det$eventID] <- TRUE
 tracks$tag_det <- paste(tracks$animal_id, tracks$last_det)
 
-# do I want to duplicate last det 
-# WES COME BACK TO THIS
 tracks$bin_timestamp <- as_datetime(tracks$bin_timestamp)
 ```
 
@@ -272,25 +276,26 @@ animation <- ggplot() +
   # # receiver locations
   geom_point(data = stations,
              aes(x = X, y = Y), 
-             shape = 21, fill = "#F3E356", colour = "#F3E356",
-             alpha = 0.4) +
+             shape = 21, fill = "#F3B356", colour = "#EA7A1E",
+             alpha = 0.8) +
+  # you could switch these points out for buffers (use sf::st_buffer)
+  # corresponding to the detection radius 
   
   # tag tracks
   geom_path(data = tracks,
-            aes(x = X, y = Y, 
-                group = animal_id, color = animal_id),
+            aes(x = X, y = Y, group = animal_id),
+            colour = "#5BBAF2",
             alpha = 0.4, linewidth = 0.7) +
-  #scale_color_manual(values = c("#5BBAF2", "#e3766e")) +
-  ggnewscale::new_scale_color() +
+  
   geom_point(data = tracks, 
             aes(x = X, y = Y, 
-                group = animal_id, color = tag_det),
-            size = 1.8) +
-  # scale_color_manual(values = c("#5BBAF2", "transparent", "#e3766e", "transparent")) +
+                group = animal_id, colour = last_det),
+            size = 2.4) +
+  scale_colour_manual(values = c("#006fa2", "transparent")) +
   
   # animate
   gganimate::transition_reveal(bin_timestamp) +
-  labs(title = "DateTime: {lubridate::as_date(frame_along)}") +
+  labs(title = "DateTime: {lubridate::floor_date(frame_along, unit = 'hour')}") +
   gganimate::ease_aes("linear") +
   
   # theme
@@ -303,7 +308,7 @@ animation <- ggplot() +
 gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
           width = 12, height = 12, units = "cm", 
-          res = 300, nframes = 200,
+          res = 30, nframes = 200,
           bg = "transparent")
 # to initially check that the animation code works, I run a low res version with fewer frames, and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
