@@ -20,7 +20,7 @@ If you have any issues with this code after the workshop, please reach out and I
 ## install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
   "basemaps", "gganimate", "terra", "tidyterra",  "ggnewscale",
-  "geosphere"))
+  "geosphere", "ggnewscale"))
 
 install.packages("rnaturalearthhires",
   repos = "https://ropensci.r-universe.dev",
@@ -47,6 +47,10 @@ library(gganimate) # animations
 
 # The sf package defaults to using spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
 sf::sf_use_s2(FALSE) 
+
+# with s2 turned off, the following warnings will pop-up. They are not issues:
+# although coordinates are longitude/latitude, st_intersection assumes that they are planar
+# Warning: attribute variables are assumed to be spatially constant throughout all geometries
 ```
 The data for this workshop are combined into one list (`data/data.RDS`). We will extract each dataset from this list as follows:
 
@@ -200,7 +204,7 @@ glatos.dets$detection_timestamp_utc <- lubridate::as_datetime(glatos.dets$detect
 #                           trans = transition$transition,
 #                           lnl_thresh = 2, int_time_stamp = 600)
 
-tracks <- data$interpolated_tracks
+tracks <- data$interpolated_tracks # saved version to reduce time
 
 # lnl_tresh determines the degree of linear vs non-linear interpolation. The lnl_thresh default is 0.9, but we increase the value when tracks are being interpolated over land
 # int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 600 means one interpolated position per 600 seconds, or every 10 minutes). For my own work (study area scale: 100s of kilometres), I interpolate one position every 30 minutes.
@@ -243,9 +247,11 @@ satellite <- basemaps::basemap_stars(ext = study.area.box,
   map_service = "esri", map_type = "world_imagery", map_res = 1)
 
 class(satellite) # stars: raster cubes (multiple raster layers)
-sf::st_crs(satellite) # 3857 (Web Mercator)
-satellite.rgb <- stars::st_rgb(satellite) # converts 3 satellite layers (RGB) to RGB colour
+sf::st_crs(satellite) # projection is CRS 3857 (Web Mercator)
+plot(satellite)
 
+ # convert 3 colour layers (RGB) to one colour layer
+satellite.rgb <- stars::st_rgb(satellite)
 ggplot() +
   geom_stars(data = satellite.rgb) +
   coord_sf()
@@ -253,7 +259,7 @@ ggplot() +
 
 We need to convert the tracks and receiver station coordinates to the same projection as the satellite basemap. The tracks and stations are in WGS 1984 (CRS 4326) - which uses units of degrees longitude and latitude. The satellite basemap is in Web Mercator (CRS 3857) - which uses metres as its unit of measurement. To check this, you can run `st_crs(satellite)`.
 
-```{r Transform tracks and receiver stations to basemap projection}
+```{r Transform tracks and receiver stations to Web Mercator}
 # convert tracks from WGS 1984 to Web Mercator (CRS 3857) to match the satellite basemap
 tracks <- sf::st_as_sf(tracks, 
   coords = c("longitude", "latitude"), crs = st_crs(4326))
@@ -305,8 +311,14 @@ Now we can make the animation. We do this by making a standard `ggplot()` and th
 We combine `geom_point(data = tracks)` and `geom_path(data = tracks)` so that the animation shows each fish moving, as well as its previous track.
 
 ```{r Make animation}
+# make colour palettes:
+tracks.pal <- c("#E69F00", "#56B4E9", "#009E73", "#0072B2",
+               "#D55E00", "#CC79A7")
+sort(unique(tracks$tag_det))
+points.pal <- c("#E69F00", NA, "#56B4E9", NA, "#009E73", NA, "#0072B2", NA,
+               "#D55E00", NA, "#CC79A7", NA) # point palette (tag, last_det)
+
 animation <- ggplot() +
-  
   #satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
@@ -321,16 +333,16 @@ animation <- ggplot() +
   
   # tag tracks
   geom_path(data = tracks,
-            aes(x = X, y = Y, group = animal_id),
-            colour = "#5BBAF2",
+            aes(x = X, y = Y, colour = animal_id),
             alpha = 0.4, linewidth = 0.7) +
+  scale_colour_manual(values = tracks.pal) +
+  ggnewscale::new_scale_colour() +
   
   geom_point(data = tracks, 
             aes(x = X, y = Y, 
-                group = animal_id, colour = last_det),
+                group = animal_id, colour = tag_det),
             size = 2.4) +
-  # make the last position in the track transparent
-  scale_colour_manual(values = c("#006fa2", "transparent")) +
+  scale_colour_manual(values = points.pal) +
   
   # animate
   gganimate::transition_reveal(bin_timestamp) +
@@ -344,12 +356,12 @@ animation <- ggplot() +
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
 
-gganimate::anim_save("animations/example-animation0005.gif",
+gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
-          width = 12, height = 12, units = "cm", 
-          res = 300, nframes = 140,
+          width = 9, height = 9, units = "cm", 
+          res = 200, nframes = 90,
           bg = "transparent")
-# to initially check that the animation code works, I run a low res version with fewer frames, and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
+# to initially check that the animation code works, I will run a low res version with fewer frames, and then increase to res = 300 (or even 600) DPI, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
 ```
 
