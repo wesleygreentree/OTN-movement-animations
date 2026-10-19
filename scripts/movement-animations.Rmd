@@ -48,33 +48,25 @@ library(gganimate) # animations
 # The sf package defaults to using spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
 sf::sf_use_s2(FALSE) 
 ```
+The data for this workshop are combined into one list (`data/data.RDS`). We will extract each dataset from this list as follows:
 
 ```{r Load data}
+data <- readRDS("data/data.RDS")
+
 # basemap of Nova Scotia and New Brunswick
-nova.scotia <- readRDS("data/nova-scotia.RDS")
+nova.scotia <- data$nova_scotia
 
 # Passamaquoddy Bay shapefile
-passamaquoddy.bay <- readRDS("data/Passamaquoddy-Bay.RDS")
+passamaquoddy.bay <- data$passamaquoddy_bay
 
 # Magaguadavic River shapefile
-magaguadavic.river <- readRDS("data/Magaguadavic-River.RDS")
+magaguadavic.river <- data$magaguadavic_river
 
 # Atlantic salmon detections
-salmon.dets <- readRDS("data/Atlantic-salmon-detections.RDS") 
-names(salmon.dets)[21:22] <- c("longitude", "latitude")
+salmon.dets <- data$salmon_detections
 
 # Telemetry array in Passamaquoddy Bay in May 2021
-stations <- readRDS("data/receiver-metadata.RDS")
-
-# data <- list(nova_scotia = nova.scotia, 
-#              passamaquoddy_bay = passamaquoddy.bay, 
-#              magaguadavic_river = magaguadavic.river,
-#              salmon_detections = salmon.dets,
-#              receiver_stations = stations,
-#              transition_layer = water.trans$transition,
-#              interpolated_tracks = tracks,
-#              satellite_basemap = satellite)
-# saveRDS(data, "data/data.RDS")
+stations <- data$receiver_stations
 ```
 
 #### 1. View receiver array and detection data
@@ -139,6 +131,10 @@ Next, we will use `water` to make a **transition layer**. A transition layer is 
 
 We produce the transition layer with `glatos::make_transition()`. Since the transition layer is converting ocean polygons (called "vector data") to a grid (called "raster data"), we manually set the desired resolution of those grid cells.
 
+We want a fine-enough resolution that each land mass is at least two grid cells wide in the transition layer, as each grid cell is connected in 16 directions. See the `make_transition()` documentation for more.
+
+When making a high resolution transition layer of your study, make sure to save the transition layer using `saveRDS(transition, filename = "")`. The transition layer takes a long time to make, so we don't want to repeat this effort many times.
+
 ```{r Make transition layer}
 # to speed up computation, we will limit water to the area needed, based on where the six salmon were detected
 study.area.box <- st_bbox(c(xmin = -67.2, ymin = 44.85,
@@ -151,38 +147,36 @@ class(study.area.water) # sfc_MULTIPOLYGON
 study.area.water <- st_as_sf(study.area.water)
 # glatos does not work with sfc_MULTIPOLYGON, but it will work with a sf object
 
-# Make translation layer
-
-# longitude and latitude degrees are not equal. glatos provides a function to convert metres to decimal degrees. For broader study areas, even with complex coastlines, 200 m is usually a good starting resolution. However, Passamaquoddy Bay has a very narrow causeway that requires a much finer transition layer
+# Make translation layer -----
+# longitude and latitude degrees are not equal. glatos provides a function to convert metres to decimal degrees. For broader study areas, even with complex coastlines, 200 m is usually a good starting resolution. However, Passamaquoddy Bay has a very narrow causeway that requires a much finer transition layer (here, 30 m)
 res <- scale_meters_to_degrees(x = 30, study.area.water, ref = "center")
+res
 
-# Creating the translation layer takes 1.3 minutes on my laptop. You can run the next line of code, or load an already-created translation layer from the data RDS file.
-water.trans <- glatos::make_transition(study.area.water,
-  res = c(res[1], res[2]), epsg = 4326)
-# this takes 1.3 minutes on my laptop
+# Creating the translation layer takes 1.3 minutes on my laptop. You can run the next line of code, or load an already-created translation layer from the data.RDS file:
 
-#water.trans <- data$transition_layer
+# transition <- glatos::make_transition(study.area.water,
+#   res = c(res[1], res[2]), epsg = 4326)
+# transition <- transition$rast
+# saveRDS(transition, "data/transition-layer.RDS") 
 
-#saveRDS(water.trans, "data/transition-layer.RDS") # it's useful to save this as an RDS object. For the larger study areas that we often work in, the transition layer can take very long to create.
+transition <- data$transition_layer # load saved version
 
 # take a close look to compare the transition layer to receiver locations
 # convert the raster to a terra SpatRaster
-water.trans.terra <- terra::rast(water.trans$rast) 
+transition.terra <- terra::rast(transition) 
 
 ggplot() +
-  tidyterra::geom_spatraster(data = water.trans.terra) +
+  tidyterra::geom_spatraster(data = transition.terra) +
   geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
              colour = "yellow")
 
 # zoom in on thin causeway
 ggplot() +
-  tidyterra::geom_spatraster(data = water.trans.terra,
+  tidyterra::geom_spatraster(data = transition.terra,
                              maxcell = 5e7) +
   geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
              colour = "yellow") +
   coord_sf(xlim = c(-67.04, -67.032), ylim = c(44.936, 44.942))
-
-# Adjacent cells are connected by 16 directions and transition function returns 0 (land) for movements between land and water and >0 for all over-water movements.
 ```
 
 #### 3. Interpolate movement tracks that stay in the water
@@ -203,7 +197,7 @@ glatos.dets$detection_timestamp_utc <- lubridate::as_datetime(glatos.dets$detect
 # Interpolating movement tracks takes a long time with such a fine-scale transition layer (12 minutes on my laptop). I interpolated the movement tracks with the following code, but we will use a saved version of the tracks in the workshop. 
 
 # tracks <- glatos::interpolate_path(glatos.dets,
-#                           trans = water.trans$transition,
+#                           trans = transition$transition,
 #                           lnl_thresh = 2, int_time_stamp = 600)
 
 tracks <- data$interpolated_tracks
@@ -211,36 +205,39 @@ tracks <- data$interpolated_tracks
 # lnl_tresh determines the degree of linear vs non-linear interpolation. The lnl_thresh default is 0.9, but we increase the value when tracks are being interpolated over land
 # int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 600 means one interpolated position per 600 seconds, or every 10 minutes). For my own work (study area scale: 100s of kilometres), I interpolate one position every 30 minutes.
 
-# view interpolated paths
+# interpolated tracks
 ggplot() +
   geom_sf(data = water, fill = "lightblue") + 
   geom_path(data = tracks,
             aes(x = longitude, y = latitude, color = animal_id)) +
-  #coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2)) +
-  coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45)) +
+  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2)) +
   scale_x_continuous(breaks = c(-67.2, -67, -66.8)) +
   scale_y_continuous(breaks = c(44.9, 45, 45.1, 45.2)) +
   theme_bw() +
   theme(panel.grid = element_blank(),
         panel.background = element_rect(fill = "grey90"))
 
-# saveRDS(water.trans$transition, "data/temp-water-trans.RDS") # 0.0003 res
-# saveRDS(tracks, "data/temp-tracks.RDS")
-# file.size(water.trans$transition)
-# 
-# object.size(water.trans$transition)
+# zoom in to ensure that tracks don't cross the thin causeway
+ggplot() +
+  geom_sf(data = water, fill = "lightblue") + 
+  geom_path(data = tracks,
+            aes(x = longitude, y = latitude, color = animal_id)) +
+  coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45)) +
+  scale_x_continuous(breaks = c(-67.2, -67, -66.8)) +
+  scale_y_continuous(breaks = c(44.9, 45, 45.1, 45.2)) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        panel.background = element_rect(fill = "grey90"))
 ```
 
 #### 4. Animation
 
 We will extract a satellite basemap for the study area through Esri's World Imagery dataset. This satellite data comes as a "raster cube," as it consists of three layers - red saturation, blue saturation, and green saturation values. We will combine them into a single colour layer.
 
+The `basemaps` package requires internet access. If you don't have internet access, you can substitute with the nova.scotia basemap. Just convert it to Web Mercator, using `st_transform(nova.scotia, crs = st_crs(3857))`.
+
 ```{r Get satellite basemap for animation}
 # load in satellite basemap with the basemaps package
-# if you have trouble connecting to the internet, the basemap is saved in the data file:
-# satellite <- data$satellite_basemap
-
-
 options(tz="UTC") # R doesn't yet recognize the new British Columbia time zone. The basemaps R package requires that your R session is using a known time zone.
 satellite <- basemaps::basemap_stars(ext = study.area.box,
   map_service = "esri", map_type = "world_imagery", map_res = 1)
