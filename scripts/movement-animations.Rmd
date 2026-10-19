@@ -16,7 +16,7 @@ If you have any issues with this code after the workshop, please reach out and I
 
 ```{r Install packages}
 ## install packages that you don't already have:
-install.packages(c("remotes", "sf", "stars", "tidyverse",
+install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
   "basemaps", "gganimate", "terra", "tidyterra",  "ggnewscale",
   "geosphere"))
 
@@ -24,23 +24,24 @@ install.packages("rnaturalearthhires",
   repos = "https://ropensci.r-universe.dev",
   type = "source") # high resolution basemaps for RNaturalEarth
 install.packages("rnaturalearth")
+
 install.packages("curl") # when installing curl, RStudio will ask "Do you want install from sources the package which needs compilation?" Select no
-remotes::install_github("ocean-tracking-network/glatos") # works best if installed from OTN GitHub
+
+remotes::install_github("ocean-tracking-network/glatos") 
 ```
 
 ```{r Load libraries}
-library(ggplot2)
-library(dplyr)
-library(lubridate)
-library(glatos) 
-library(sf)
-library(terra)
-library(tidyterra)
-library(basemaps)
-library(geosphere)
-library(stars)
-library(gganimate)
-library(ggnewscale) # check if I need ggnewscale still
+library(ggplot2) # plots
+library(dplyr) # data wrangling
+library(lubridate) # handles date/times
+library(glatos) # interpolate movement tracks
+library(sf) # spatial data (vectors)
+library(terra) # spatial data (rasters)
+library(tidyterra) # visualizing raster data
+library(basemaps) # satellite base map
+library(geosphere) # spatial data
+library(stars) # spatial data (raster cubes)
+library(gganimate) # animations
 
 # The sf package defaults to using spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
 sf::sf_use_s2(FALSE) 
@@ -138,10 +139,9 @@ study.area.water <- sf::as_Spatial(study.area.water) # glatos requires that the 
 
 # Make translation layer, using resolution 0.0005 decimal degrees. 0.002 decimal degrees is usually high enough resolution in larger study areas
 water.trans <- glatos::make_transition(study.area.water,
-  res = c(0.0005, 0.0005), epsg = 4326) 
+  res = c(0.001, 0.001), epsg = 4326)
 # this takes 30 seconds
 #saveRDS(water.trans, "data/transition-layer.RDS") # it's useful to save this as an RDS object. For the larger study areas that we often work in, the transition layer can take very long to create.
-
 plot(water.trans$rast)
 
 # take a close look to compare the transition layer to receiver locations
@@ -161,11 +161,15 @@ ggplot() +
            expand = FALSE)
 
 ggplot() +
-  tidyterra::geom_spatraster(data = water.trans.terra) +
+  tidyterra::geom_spatraster(data = water.trans.terra,
+                             maxcell = 5e7) +
   geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
              colour = "yellow") +
-  coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45),
-           expand = FALSE)
+  coord_sf(xlim = c(-67.04, -67.032), ylim = c(44.936, 44.942))
+  # coord_sf(xlim = c(-67.05, -67.02), ylim = c(44.93, 44.95),
+  #          expand = FALSE)
+
+# . Adjacent cells are connected by 16 directions and transition function returns 0 (land) for movements between land and water and >0 for all over-water movements.
 ```
 
 #### 3. Interpolate movement tracks that stay in the water
@@ -184,9 +188,10 @@ glatos.dets$detection_timestamp_utc <- as_datetime(glatos.dets$detection_timesta
 Sys.time()
 tracks <- glatos::interpolate_path(glatos.dets, 
                            trans = water.trans$transition, 
-                           lnl_thresh = 2, int_time_stamp = 180)
+                           lnl_thresh = 10, int_time_stamp = 1200)
 Sys.time()
-saveRDS(tracks, "data/interpolated-tracks-180sec.RDS")
+# lnl default is 0.9, but we increase the value when tracks are being interpolated over land
+#saveRDS(tracks, "data/interpolated-tracks-180sec.RDS")
 
 # with this dataset, this takes four minutes (varying on your computer)
 # int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 600 means one interpolated position per 600 seconds, or every 10 minutes)
@@ -198,7 +203,7 @@ saveRDS(tracks, "data/interpolated-tracks-180sec.RDS")
 # view interpolated paths
 ggplot() +
   geom_sf(data = water, fill = "lightblue") + 
-  geom_path(data = tracks, 
+  geom_path(data = tracks,
             aes(x = longitude, y = latitude, color = animal_id)) +
   #coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2)) +
   coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45)) +
@@ -207,6 +212,12 @@ ggplot() +
   theme_bw() +
   theme(panel.grid = element_blank(),
         panel.background = element_rect(fill = "grey90"))
+
+# saveRDS(water.trans$transition, "data/temp-water-trans.RDS") # 0.0003 res
+# saveRDS(tracks, "data/temp-tracks.RDS")
+# file.size(water.trans$transition)
+# 
+# object.size(water.trans$transition)
 ```
 
 #### 4. Animation
@@ -216,6 +227,7 @@ ggplot() +
 options(tz="UTC")
 satellite <- basemaps::basemap_stars(ext = study.area.box,
   map_service = "esri", map_type = "world_imagery", map_res = 1)
+#saveRDS(satellite, "data/satellite.RDS")
 
 class(satellite) # stars: raster cubes (multiple raster layers)
 sf::st_crs(satellite) # 3857 (Web Mercator)
@@ -295,7 +307,7 @@ animation <- ggplot() +
   
   # animate
   gganimate::transition_reveal(bin_timestamp) +
-  labs(title = "DateTime: {lubridate::floor_date(frame_along, unit = 'hour')}") +
+  labs(title = "DateTime: {lubridate::as_date(frame_along)}") +
   gganimate::ease_aes("linear") +
   
   # theme
@@ -305,18 +317,13 @@ animation <- ggplot() +
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
 
-gganimate::anim_save("animations/example-animation.gif",
+gganimate::anim_save("animations/example-animation0005.gif",
           animation = animation,
           width = 12, height = 12, units = "cm", 
-          res = 30, nframes = 200,
+          res = 300, nframes = 140,
           bg = "transparent")
 # to initially check that the animation code works, I run a low res version with fewer frames, and then increase to res = 600, nframes = 200 (20 second video with 600 dpi)
 # can take an hour or more to save large animations
-```
-
-```{r Animations with images of fish}
-
-
 ```
 
 ```{r Appendix A - Derive an ocean shapefile from land}
@@ -341,6 +348,6 @@ ggplot() +
 
 ```
 
-For additional details/resources on glatos: <https://rdrr.io/github/jsta/glatos/man/glatos.html> <https://github.com/ocean-tracking-network/glatos>
+#### Additional resources
 
 Examples of extra things to try with gganimate (e.g., shadow wakes instead of paths behind points; fish image instead of point using ggimage package - this works really well): <https://goodekat.github.io/presentations/2019-isugg-gganimate-spooky/slides.html#1>
