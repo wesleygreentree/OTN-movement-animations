@@ -16,6 +16,10 @@ In this workshop, we will make animations of the movements of six juvenile Atlan
 
 If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
 
+#### Installing packages:
+
+Please run the following code chunk before the workshop. If you run into any issues, please email me (wgreentree@outlook.com) and I will be happy to help.
+
 ```{r Install packages}
 ## install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
