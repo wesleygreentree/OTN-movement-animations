@@ -180,6 +180,8 @@ transition <- data$transition_layer # load saved version
 
 # take a close look to compare the transition layer to receiver locations
 plot(transition)
+
+# zoom in to ensure that this thin causeway is preserved as land in the transition layer
 plot(transition, 
      xlim = c(-67.04, -67.032), ylim = c(44.936, 44.942))
 ```
@@ -358,7 +360,7 @@ animation <- ggplot() +
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
 
-gganimate::anim_save(here::here("animations", "example-animation.Rmd"),
+gganimate::anim_save(here::here("animations", "example-animation.gif"),
           animation = animation,
           width = 12, height = 12, units = "cm", 
           res = 200, nframes = 100,
