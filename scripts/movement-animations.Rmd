@@ -4,7 +4,7 @@ Ocean Tracking Network Symposium, November 2026
 
 Animations of the movements of tagged animals provide helpful insights in telemetry studies. However, animations can be challenging to make. The goal of this workshop is to equip you with the tools needed to make animations of your telemetry studies.
 
-These animations are facilitated by the `glatos` R package, produced by the [Great Lakes Acoustic Telemetry Observation System](glatos.org). The `glatos` R package was developed by Chris Holbrook, Todd Hayden, Thomas Binder, and Jon Pye. For more information on the `glatos` R package, please refer to:
+These animations are facilitated by the `glatos` R package, produced by the [Great Lakes Acoustic Telemetry Observation System](glatos.org). Chris Holbrook, Todd Hayden, Thomas Binder, and Jon Pye developed/maintain this package (thank you!). For more information on the `glatos` R package, please refer to:
 
 -   <https://rdrr.io/github/jsta/glatos/man/glatos.html>
 
@@ -12,7 +12,7 @@ These animations are facilitated by the `glatos` R package, produced by the [Gre
 
 We will combine `glatos` with the widely-used `ggplot2` and `sf` packages to make animations. `ggplot2` provides an easy way to producing beautiful data visualizations in R. `sf`, along with the companion `terra` and `stars` packages, provides a unified approach to working with spatial data in R. The `gganimate` package allows to produce animated ggplots. Since we are using these broadly-applicable R packages, you can extend this workshop's code to visualize data sets beyond acoustic telemetry data.
 
-In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/data/repository/pbsm>). For more information about this study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
+In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/project?ccode=PBSM>). For more information about these smolts and the broader tagging study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
 
 If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
 
@@ -52,6 +52,7 @@ sf::sf_use_s2(FALSE)
 # although coordinates are longitude/latitude, st_intersection assumes that they are planar
 # Warning: attribute variables are assumed to be spatially constant throughout all geometries
 ```
+
 The data for this workshop are combined into one list (`data/data.RDS`). We will extract each dataset from this list as follows:
 
 ```{r Load data}
@@ -94,8 +95,11 @@ A problem immediately jumps out: Straight-line movement paths cross land.
 ggplot() +
   geom_sf(data = nova.scotia) +
   geom_path(data = salmon.dets,
-             aes(x = longitude, y = latitude, colour = tagName),
+            aes(x = longitude, y = latitude, colour = tagName),
             show.legend = FALSE) +
+  geom_point(data = salmon.dets,
+             aes(x = longitude, y = latitude, colour = tagName),
+             show.legend = FALSE) +
   coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
            expand = FALSE) +
   theme_bw()
@@ -153,7 +157,7 @@ study.area.water <- st_as_sf(study.area.water)
 
 # Make translation layer -----
 # longitude and latitude degrees are not equal. glatos provides a function to convert metres to decimal degrees. For broader study areas, even with complex coastlines, 200 m is usually a good starting resolution. However, Passamaquoddy Bay has a very narrow causeway that requires a much finer transition layer (here, 30 m)
-res <- scale_meters_to_degrees(x = 30, study.area.water, ref = "center")
+res <- glatos::scale_meters_to_degrees(x = 30, study.area.water, ref = "center")
 res
 
 # Creating the translation layer takes 1.3 minutes on my laptop. You can run the next line of code, or load an already-created translation layer from the data.RDS file:
@@ -187,7 +191,7 @@ ggplot() +
 
 We use the transition layer to interpolate movement tracks between detections and ensure the tracks stay in the water.
 
-With large data sets and/or very fine-scale transition layers, the interpolation may not run easily on your personal laptop. To get around this, you can run the interpolation in batches (e.g., 10-50 tags at a time). I split my dataset (~500,000 detections) into a few batches and run on our lab's desktop with 32 GM RAM. Each batch can take more than an hour.
+With large data sets and/or very fine-scale transition layers, the interpolation may not run easily on your personal laptop. To get around this, you can run the interpolation in batches (e.g., 10-50 tags at a time). I split my dataset (\~500,000 detections) into a few batches and run on our lab's desktop with 32 GM RAM. Each batch can take more than an hour.
 
 ```{r Interpolate tracks to stay in water}
 # First, let's convert the detection data into the format needed for glatos
@@ -242,15 +246,16 @@ The `basemaps` package requires internet access. If you don't have internet acce
 
 ```{r Get satellite basemap for animation}
 # load in satellite basemap with the basemaps package
-options(tz="UTC") # R doesn't yet recognize the new British Columbia time zone. The basemaps R package requires that your R session is using a known time zone.
+options(tz="UTC") # with this year's changes to time zones in Canada, R does not yet recognize all Windows time zones. You may need to tell R a time zone so that it can use the following basemaps function.
 satellite <- basemaps::basemap_stars(ext = study.area.box,
   map_service = "esri", map_type = "world_imagery", map_res = 1)
+# sometimes you have to run this a second time to ensure that the function connects to the internet and retrieves the satellite basemap
 
 class(satellite) # stars: raster cubes (multiple raster layers)
 sf::st_crs(satellite) # projection is CRS 3857 (Web Mercator)
 plot(satellite)
 
- # convert 3 colour layers (RGB) to one colour layer
+# convert 3 colour layers (RGB) to one colour layer
 satellite.rgb <- stars::st_rgb(satellite)
 ggplot() +
   geom_stars(data = satellite.rgb) +
@@ -312,11 +317,12 @@ We combine `geom_point(data = tracks)` and `geom_path(data = tracks)` so that th
 
 ```{r Make animation}
 # make colour palettes:
-tracks.pal <- c("#E69F00", "#56B4E9", "#009E73", "#0072B2",
+tracks.pal <- c("#845EC2", "#56B4E9", "#009E73", "#0072B2",
                "#D55E00", "#CC79A7")
 sort(unique(tracks$tag_det))
-points.pal <- c("#E69F00", NA, "#56B4E9", NA, "#009E73", NA, "#0072B2", NA,
-               "#D55E00", NA, "#CC79A7", NA) # point palette (tag, last_det)
+points.pal <- c("#845EC2", NA, "#56B4E9", NA, "#009E73", NA,
+  "#0072B2", NA, "#D55E00", NA, "#CC79A7", NA) 
+# point palette (tag, last_det)
 
 animation <- ggplot() +
   #satellite map
@@ -338,9 +344,8 @@ animation <- ggplot() +
   scale_colour_manual(values = tracks.pal) +
   ggnewscale::new_scale_colour() +
   
-  geom_point(data = tracks, 
-            aes(x = X, y = Y, 
-                group = animal_id, colour = tag_det),
+  geom_point(data = tracks,
+            aes(x = X, y = Y, group = animal_id, colour = tag_det),
             size = 2.4) +
   scale_colour_manual(values = points.pal) +
   
@@ -358,11 +363,12 @@ animation <- ggplot() +
 
 gganimate::anim_save("animations/example-animation.gif",
           animation = animation,
-          width = 9, height = 9, units = "cm", 
-          res = 200, nframes = 90,
+          width = 12, height = 12, units = "cm", 
+          res = 200, nframes = 100,
           bg = "transparent")
-# to initially check that the animation code works, I will run a low res version with fewer frames, and then increase to res = 300 (or even 600) DPI, nframes = 200 (20 second video with 600 dpi)
-# can take an hour or more to save large animations
+# to initially check that the animation code works, I will run a low res version with fewer frames, and then increase to res = 300 (or even 600) DPI, nframes = 200 (20 second video with 600 dpi). For shorter datasets like this one (less than a month), 100 frames can be sufficient.
+
+# it can take an hour or more to save large animations
 ```
 
 Appendix A: Code to derive an ocean shapefile from a land shapefile.
@@ -376,9 +382,6 @@ nova.scotia.poly <- st_sfc(st_polygon(list(cbind(
   c(box$ymin, box$ymin, box$ymax, box$ymax, box$ymin)))),
   crs = 4326)
 
-# The sf package uses spherical geometry, but many of the shapefiles that we encounter in the real world (including bc.coast) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
-sf::sf_use_s2(FALSE) 
-
 # make an ocean shape file by inverting bc.coast
 ocean <- st_difference(nova.scotia.poly,
                        st_union(st_combine(nova.scotia)))
@@ -386,7 +389,6 @@ ocean <- st_difference(nova.scotia.poly,
 # view ocean shapefile
 ggplot() +
   geom_sf(data = ocean, fill = "lightblue")
-
 ```
 
 #### Additional resources
