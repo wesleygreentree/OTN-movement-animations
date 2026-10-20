@@ -20,7 +20,7 @@ If you have any issues with this code after the workshop, please reach out and I
 ## install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
   "basemaps", "gganimate", "terra", "tidyterra",  "ggnewscale",
-  "geosphere", "ggnewscale"))
+  "geosphere", "ggnewscale", "here"))
 
 install.packages("rnaturalearthhires",
   repos = "https://ropensci.r-universe.dev",
@@ -29,7 +29,11 @@ install.packages("rnaturalearth")
 
 install.packages("curl") # when installing curl, RStudio will ask "Do you want install from sources the package which needs compilation?" Select no
 
-remotes::install_github("ocean-tracking-network/glatos") 
+remotes::install_github("ocean-tracking-network/glatos")
+# If this installation fails and you receive an error message including HTTP 401, this means you need a GitHub Personal Access Token, which can be created at https://github.com/settings/tokens.
+# GitHub is a website with online repositories for R packages. Nearly all R packages are hosted on GitHub, in addition to the CRAN repository that we access through "install.packages()"
+# You then install the package with the following line. For privacy, do not share your token with others, and delete it from your R script after you install glatos.
+#remotes::install_github("ocean-tracking-network/glatos", auth_toekn = "paste-token-inside-these-quotation-marks")
 ```
 
 ```{r Load libraries}
@@ -44,6 +48,7 @@ library(basemaps) # satellite base map
 library(geosphere) # spatial data
 library(stars) # spatial data (raster cubes)
 library(gganimate) # animations
+library(here) # for loading data
 
 # The sf package defaults to using spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
 sf::sf_use_s2(FALSE) 
@@ -56,7 +61,7 @@ sf::sf_use_s2(FALSE)
 The data for this workshop are combined into one list (`data/data.RDS`). We will extract each dataset from this list as follows:
 
 ```{r Load data}
-data <- readRDS("data/data.RDS")
+data <- readRDS(here::here("data", "data.RDS"))
 
 # basemap of Nova Scotia and New Brunswick
 nova.scotia <- data$nova_scotia
@@ -361,7 +366,7 @@ animation <- ggplot() +
         plot.background = element_rect(fill = "black"),
         plot.title = element_text(color = "white"))
 
-gganimate::anim_save("animations/example-animation.gif",
+gganimate::anim_save(here::here("animations", "example-animation.Rmd"),
           animation = animation,
           width = 12, height = 12, units = "cm", 
           res = 200, nframes = 100,
