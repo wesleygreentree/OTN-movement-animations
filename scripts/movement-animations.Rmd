@@ -179,21 +179,9 @@ res
 transition <- data$transition_layer # load saved version
 
 # take a close look to compare the transition layer to receiver locations
-# convert the raster to a terra SpatRaster
-transition.terra <- terra::rast(transition) 
-
-ggplot() +
-  tidyterra::geom_spatraster(data = transition.terra) +
-  geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
-             colour = "yellow")
-
-# zoom in on thin causeway
-ggplot() +
-  tidyterra::geom_spatraster(data = transition.terra,
-                             maxcell = 5e7) +
-  geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
-             colour = "yellow") +
-  coord_sf(xlim = c(-67.04, -67.032), ylim = c(44.936, 44.942))
+plot(transition)
+plot(transition, 
+     xlim = c(-67.04, -67.032), ylim = c(44.936, 44.942))
 ```
 
 #### 3. Interpolate movement tracks that stay in the water
