@@ -37,7 +37,7 @@ remotes::install_github("ocean-tracking-network/glatos")
 # If this installation fails and you receive an error message including HTTP 401, this means you need a GitHub Personal Access Token, which can be created at https://github.com/settings/tokens.
 # GitHub is a website with online repositories for R packages. Nearly all R packages are hosted on GitHub, in addition to the CRAN repository that we access through "install.packages()"
 # You then install the package with the following line. For privacy, do not share your token with others, and delete it from your R script after you install glatos.
-#remotes::install_github("ocean-tracking-network/glatos", auth_toekn = "paste-token-inside-these-quotation-marks")
+#remotes::install_github("ocean-tracking-network/glatos", auth_token = "paste-token-inside-these-quotation-marks")
 ```
 
 ```{r Load libraries}
