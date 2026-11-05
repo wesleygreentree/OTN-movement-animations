@@ -14,11 +14,11 @@ We will combine `glatos` with the widely-used `ggplot2` and `sf` packages to mak
 
 In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/project?ccode=PBSM>). For more information about these smolts and the broader tagging study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
 
-If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree\@outlook.com
+If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree@outlook.com
 
 #### Installing packages:
 
-Please run the following code chunk before the workshop. If you run into any issues, please email me (wgreentree@outlook.com) and I will be happy to help.
+Please run the following code chunk before the workshop. If you run into any issues, please email me ([wgreentree@outlook.com](mailto:wgreentree@outlook.com){.email}) and I will be happy to help.
 
 ```{r Install packages}
 ## install packages that you don't already have:
@@ -38,6 +38,9 @@ remotes::install_github("ocean-tracking-network/glatos")
 # GitHub is a website with online repositories for R packages. Nearly all R packages are hosted on GitHub, in addition to the CRAN repository that we access through "install.packages()"
 # You then install the package with the following line. For privacy, do not share your token with others, and delete it from your R script after you install glatos.
 #remotes::install_github("ocean-tracking-network/glatos", auth_token = "paste-token-inside-these-quotation-marks")
+
+# alternative approach
+install.packages('glatos', repos = c('https://ocean-tracking-network.r-universe.dev', 'https://cloud.r-project.org'))
 ```
 
 ```{r Load libraries}
@@ -112,6 +115,8 @@ ggplot() +
   coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
            expand = FALSE) +
   theme_bw()
+ggsave("figures/atlantic-salmon-example-direct-paths.PNG",
+       width = 14, height = 17, units = "cm", dpi = 1600)
 ```
 
 #### 2. Constrain movement tracks to stay in water
