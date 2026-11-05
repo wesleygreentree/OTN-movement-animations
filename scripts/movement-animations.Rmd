@@ -115,8 +115,6 @@ ggplot() +
   coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
            expand = FALSE) +
   theme_bw()
-ggsave("figures/atlantic-salmon-example-direct-paths.PNG",
-       width = 14, height = 17, units = "cm", dpi = 1600)
 ```
 
 #### 2. Constrain movement tracks to stay in water
