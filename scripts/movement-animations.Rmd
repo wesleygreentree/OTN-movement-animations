@@ -172,8 +172,9 @@ res
 
 # Creating the translation layer takes 1.3 minutes on my laptop. You can run the next line of code, or load an already-created translation layer from the data.RDS file:
 
-transition <- glatos::make_transition(study.area.water,
-res = c(res[1], res[2]), epsg = 4326)
+#transition <- glatos::make_transition(study.area.water,
+#                                      res = c(res[1], res[2]), epsg = 4326)
+
 # if you are working with a large study area, save your transition layer as an RDS object so that you don't have to do this each time you run your animation code
 #saveRDS(transition, "data/transition-layer.RDS")
 
@@ -202,15 +203,15 @@ names(glatos.dets) <- c("animal_id", "detection_timestamp_utc",
 glatos.dets$detection_timestamp_utc <- lubridate::as_datetime(glatos.dets$detection_timestamp_utc)
 
 # Interpolate movement tracks: 
-# Interpolating movement tracks takes a long time with such a fine-scale transition layer (12 minutes on my laptop). I interpolated the movement tracks with the following code, but we will use a saved version of the tracks in the workshop. 
+# Interpolating movement tracks takes a long time with such a fine-scale transition layer (10 minutes on my laptop). I interpolated the movement tracks with the following code, but we will use a saved version of the tracks in the workshop. 
 
-tracks <- glatos::interpolate_path(glatos.dets,
-                          trans = transition$transition,
-                          lnl_thresh = 2, int_time_stamp = 600)
+#tracks <- glatos::interpolate_path(glatos.dets,
+#                          trans = transition$transition,
+#                          lnl_thresh = 2, int_time_stamp = 600)
 
 tracks <- data$interpolated_tracks # saved version to reduce time
 
-# lnl_tresh determines the degree of linear vs non-linear interpolation. The lnl_thresh default is 0.9, but we increase the value when tracks are being interpolated over land
+# lnl_tresh determines the degree of linear vs non-linear interpolation. The lnl_thresh default is 0.9 (linear interpolation), but we increase the value when tracks are being interpolated over land
 # int_time_stamp determines the frequency of interpolation (e.g., int_time_stamp = 600 means one interpolated position per 600 seconds, or every 10 minutes). For my own work (study area scale: 100s of kilometres), I interpolate one position every 30 minutes.
 
 # interpolated tracks
