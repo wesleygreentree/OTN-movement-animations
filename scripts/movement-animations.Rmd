@@ -24,7 +24,7 @@ Please run the following code chunk before the workshop. If you run into any iss
 # install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
   "basemaps", "gganimate", "terra", "tidyterra",  "ggnewscale",
-  "geosphere", "ggnewscale", "here"))
+  "geosphere", "ggnewscale", "here", "ggimage"))
 
 install.packages("rnaturalearthhires",
   repos = "https://ropensci.r-universe.dev",
@@ -38,6 +38,7 @@ install.packages('glatos', repos = c('https://ocean-tracking-network.r-universe.
 ```
 
 ```{r Load libraries}
+library(here) # for loading data
 library(ggplot2) # plots
 library(dplyr) # data wrangling
 library(lubridate) # handles date/times
@@ -49,7 +50,7 @@ library(basemaps) # satellite base map
 library(geosphere) # spatial data
 library(stars) # spatial data (raster cubes)
 library(gganimate) # animations
-library(here) # for loading data
+library(ggimage) # animating images
 
 # The sf package defaults to using spherical geometry, but many of the shapefiles that we encounter in the real world (including those used in this workshop) were developed with planar geometry. Therefore, we will tell sf to use planar geometry.
 sf::sf_use_s2(FALSE) 
@@ -219,7 +220,8 @@ ggplot() +
   geom_sf(data = water, fill = "lightblue") + 
   geom_path(data = tracks,
             aes(x = longitude, y = latitude, color = animal_id)) +
-  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2)) +
+  coord_sf(xlim = c(-67.2, -66.8), ylim = c(44.85, 45.2),
+           expand = FALSE) +
   scale_x_continuous(breaks = c(-67.2, -67, -66.8)) +
   scale_y_continuous(breaks = c(44.9, 45, 45.1, 45.2)) +
   theme_bw() +
@@ -231,7 +233,8 @@ ggplot() +
   geom_sf(data = water, fill = "lightblue") + 
   geom_path(data = tracks,
             aes(x = longitude, y = latitude, color = animal_id)) +
-  coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45)) +
+  coord_sf(xlim = c(-67.2, -66.9), ylim = c(44.85, 45),
+           expand = FALSE) +
   scale_x_continuous(breaks = c(-67.2, -67, -66.8)) +
   scale_y_continuous(breaks = c(44.9, 45, 45.1, 45.2)) +
   theme_bw() +
@@ -325,16 +328,10 @@ points.pal <- c("#845EC2", NA, "#56B4E9", NA, "#009E73", NA,
   "#0072B2", NA, "#D55E00", NA, "#CC79A7", NA) 
 # point palette (tag, last_det)
 
-satellite.rgb <- readRDS("data/satellite-rgb.RDS")
-
 animation <- ggplot() +
   #satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
-  
-  # if you can't get wifi
-  #geom_sf(data = study.area.water, fill = "lightblue") +
-  #coord_sf(expand = FALSE) +
   
   # receiver locations
   geom_point(data = stations,
@@ -370,12 +367,93 @@ animation <- ggplot() +
 
 gganimate::anim_save(here::here("animations", "example-animation.gif"),
           animation = animation,
-          width = 8, height = 8, units = "cm", 
-          res = 50, nframes = 50,
+          width = 12, height = 12, units = "cm", 
+          res = 300, nframes = 200,
           bg = "transparent")
 # to initially check that the animation code works, I will run a low res version with fewer frames, and then increase to res = 300 (or even 600) DPI, nframes = 200 (20 second video with 600 dpi). For shorter datasets like this one (less than a month), 100 frames can be sufficient.
 
 # it can take an hour or more to save large animations
+```
+
+#### 5. Extend animations with fish images
+
+Finally, we will update this animation to use an image of a salmon to represent each tagged individual, rather than points.
+
+While our example dataset is tagged Atlantic salmon post-smolt, we will use an image of a Chinook salmon post-smolt from my research (for copyright reasons). The fish image needs to be a high-quality image with the background removed that is still a small file size (e.g., \<100 KB)
+
+```{r Animating fish images}
+
+# fish image changes directions, depending on whether it is moving west or east
+# determine swimming direction
+tracks.dir <- tracks %>% group_by(animal_id) %>% 
+  mutate(last_location = lag(X),
+         diff = sign(X - last_location))
+
+# assign image based on swimming direction (when interpolated track is moving)
+tracks.dir$dir_image <- NA
+tracks.dir$dir_image[tracks.dir$diff == -1] <- "figures/salmon-left.PNG"
+tracks.dir$dir_image[tracks.dir$diff == 1] <- "figures/salmon-right.PNG"
+
+# assign image based on last swimming direction (when interpolated track is stationary)
+tracks.dir <- tracks.dir %>% group_by(animal_id) %>% 
+  fill(dir_image, .direction = "down")
+
+# image will disappear at the last interpolated position
+tracks.dir$dir_image[tracks$last_det == TRUE] <- NA
+  
+nrow(subset(tracks.dir, is.na(dir_image))) # there are 12 NA's because there is one NA for the first position and the last position of each fish. We will force the fish to face left at the first position.
+tracks.dir$dir_image[is.na(tracks.dir$dir_image) &
+                     tracks.dir$last_det == FALSE] <- "figures/salmon-left.PNG"
+nrow(subset(tracks.dir, is.na(dir_image))) # good, only one NA per fish
+
+## ANIMATION:
+
+animation <- ggplot() +
+  #satellite map
+  geom_stars(data = satellite.rgb) +
+  coord_sf(expand = FALSE) +
+  
+  # # receiver locations
+  geom_point(data = stations,
+             aes(x = X, y = Y), 
+             shape = 21, fill = "#F3B356", colour = "#EA7A1E",
+             alpha = 0.8) +
+  # you could switch these points out for buffers (use sf::st_buffer)
+  # corresponding to the detection radius 
+  
+  # tag tracks
+  geom_path(data = tracks,
+            aes(x = X, y = Y, colour = animal_id),
+            alpha = 0.4, linewidth = 0.7) +
+  scale_colour_manual(values = tracks.pal) +
+  #ggnewscale::new_scale_colour() +
+  
+  # geom_point(data = tracks,
+  #            aes(x = X, y = Y, group = animal_id, colour = tag_det),
+  #            size = 2.4) +
+  # scale_colour_manual(values = points.pal) +
+  
+  geom_image(data = tracks.dir,
+             aes(x = X, y = Y, group = animal_id, image = dir_image),
+             size = 0.18) +
+  
+  # animate
+  gganimate::transition_reveal(bin_timestamp) +
+  labs(title = "Date: {lubridate::as_date(frame_along)}") +
+  gganimate::ease_aes("linear") +
+  
+  # theme
+  theme_void() + 
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = "black"),
+        plot.background = element_rect(fill = "black"),
+        plot.title = element_text(color = "white"))
+
+gganimate::anim_save(here::here("animations", "image-animation.gif"),
+                     animation = animation,
+                     width = 12, height = 12, units = "cm", 
+                     res = 300, nframes = 175,
+                     bg = "transparent")
 ```
 
 Appendix A: Code to derive an ocean shapefile from a land shapefile.
