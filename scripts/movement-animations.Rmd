@@ -409,29 +409,20 @@ nrow(subset(tracks.dir, is.na(dir_image))) # good, only one NA per fish
 ## ANIMATION:
 
 animation <- ggplot() +
-  #satellite map
+  # satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
   
-  # # receiver locations
+  # receiver locations
   geom_point(data = stations,
              aes(x = X, y = Y), 
              shape = 21, fill = "#F3B356", colour = "#EA7A1E",
              alpha = 0.8) +
-  # you could switch these points out for buffers (use sf::st_buffer)
-  # corresponding to the detection radius 
-  
   # tag tracks
   geom_path(data = tracks,
             aes(x = X, y = Y, colour = animal_id),
             alpha = 0.4, linewidth = 0.7) +
   scale_colour_manual(values = tracks.pal) +
-  #ggnewscale::new_scale_colour() +
-  
-  # geom_point(data = tracks,
-  #            aes(x = X, y = Y, group = animal_id, colour = tag_det),
-  #            size = 2.4) +
-  # scale_colour_manual(values = points.pal) +
   
   geom_image(data = tracks.dir,
              aes(x = X, y = Y, group = animal_id, image = dir_image),
