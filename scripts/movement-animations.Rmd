@@ -379,7 +379,7 @@ gganimate::anim_save(here::here("animations", "example-animation.gif"),
 
 Finally, we will update this animation to use an image of a salmon to represent each tagged individual, rather than points.
 
-While our example dataset is tagged Atlantic salmon post-smolt, we will use an image of a Chinook salmon post-smolt from my research (for copyright reasons). The fish image needs to be a high-quality image with the background removed that is still a small file size (e.g., \<100 KB)
+While our example dataset is tagged Atlantic salmon post-smolts, we will use an image of a Chinook salmon post-smolt from my research (for copyright reasons). The fish image needs to be a high-quality image with the background removed that is still a small file size (e.g., \<100 KB).
 
 ```{r Animating fish images}
 
