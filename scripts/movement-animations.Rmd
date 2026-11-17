@@ -14,14 +14,14 @@ We will combine `glatos` with the widely-used `ggplot2` and `sf` packages to mak
 
 In this workshop, we will make animations of the movements of six juvenile Atlantic salmon in Passamaquoddy Bay, New Brunswick. These data come from open-access OTN project PBSM (<https://members.oceantrack.org/project?ccode=PBSM>). For more information about these smolts and the broader tagging study, see English et al. (2023) "Determining early marine survival and predation by endothermic predators on acoustically tagged Atlantic salmon (*Salmo salar*) post-smolts," published in the Canadian Journal of Fisheries and Aquatic Sciences (<http://dx.doi.org/10.1139/cjfas-2023-0206>).
 
-If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is wgreentree@outlook.com
+If you have any issues with this code after the workshop, please reach out and I'm happy to help. My email is [wgreentree\@outlook.com](mailto:wgreentree@outlook.com){.email}
 
 #### Installing packages:
 
-Please run the following code chunk before the workshop. If you run into any issues, please email me ([wgreentree@outlook.com](mailto:wgreentree@outlook.com){.email}) and I will be happy to help.
+Please run the following code chunk before the workshop. If you run into any issues, please email me ([wgreentree\@outlook.com](mailto:wgreentree@outlook.com){.email}) and I will be happy to help.
 
 ```{r Install packages}
-## install packages that you don't already have:
+# install packages that you don't already have:
 install.packages(c("remotes", "sf", "stars", "ggplot2", "dplyr",
   "basemaps", "gganimate", "terra", "tidyterra",  "ggnewscale",
   "geosphere", "ggnewscale", "here"))
@@ -40,7 +40,7 @@ remotes::install_github("ocean-tracking-network/glatos")
 #remotes::install_github("ocean-tracking-network/glatos", auth_token = "paste-token-inside-these-quotation-marks")
 
 # alternative approach
-install.packages('glatos', repos = c('https://ocean-tracking-network.r-universe.dev', 'https://cloud.r-project.org'))
+
 ```
 
 ```{r Load libraries}
@@ -136,6 +136,10 @@ ggplot() +
   geom_point(data = salmon.dets, aes(x = longitude, y = latitude),
              alpha = 0.1)
 
+# check projections
+st_crs(passamaquoddy.bay)
+st_crs(magaguadavic.river)
+
 # add Magaguadavic River to the ocean shapefile with sf::st_union(). st_union() will join the ocean and river polygons seamlessly
 water <- st_union(passamaquoddy.bay, magaguadavic.river)
 
@@ -175,9 +179,9 @@ res
 # Creating the translation layer takes 1.3 minutes on my laptop. You can run the next line of code, or load an already-created translation layer from the data.RDS file:
 
 # transition <- glatos::make_transition(study.area.water,
-#   res = c(res[1], res[2]), epsg = 4326)
+# res = c(res[1], res[2]), epsg = 4326)
 # transition <- transition$rast
-# saveRDS(transition, "data/transition-layer.RDS") 
+# saveRDS(transition, "data/transition-layer.RDS")
 
 transition <- data$transition_layer # load saved version
 
@@ -206,9 +210,9 @@ glatos.dets$detection_timestamp_utc <- lubridate::as_datetime(glatos.dets$detect
 # Interpolate movement tracks: 
 # Interpolating movement tracks takes a long time with such a fine-scale transition layer (12 minutes on my laptop). I interpolated the movement tracks with the following code, but we will use a saved version of the tracks in the workshop. 
 
-# tracks <- glatos::interpolate_path(glatos.dets,
-#                           trans = transition$transition,
-#                           lnl_thresh = 2, int_time_stamp = 600)
+tracks <- glatos::interpolate_path(glatos.dets,
+                          trans = transition$transition,
+                          lnl_thresh = 2, int_time_stamp = 600)
 
 tracks <- data$interpolated_tracks # saved version to reduce time
 
@@ -261,7 +265,7 @@ plot(satellite)
 satellite.rgb <- stars::st_rgb(satellite)
 ggplot() +
   geom_stars(data = satellite.rgb) +
-  coord_sf()
+  coord_sf(expand = FALSE)
 ```
 
 We need to convert the tracks and receiver station coordinates to the same projection as the satellite basemap. The tracks and stations are in WGS 1984 (CRS 4326) - which uses units of degrees longitude and latitude. The satellite basemap is in Web Mercator (CRS 3857) - which uses metres as its unit of measurement. To check this, you can run `st_crs(satellite)`.
@@ -326,14 +330,20 @@ points.pal <- c("#845EC2", NA, "#56B4E9", NA, "#009E73", NA,
   "#0072B2", NA, "#D55E00", NA, "#CC79A7", NA) 
 # point palette (tag, last_det)
 
+satellite.rgb <- readRDS("data/satellite-rgb.RDS")
+
 animation <- ggplot() +
   #satellite map
   geom_stars(data = satellite.rgb) +
   coord_sf(expand = FALSE) +
   
-  # # receiver locations
+  # if you can't get wifi
+  #geom_sf(data = study.area.water, fill = "lightblue") +
+  #coord_sf(expand = FALSE) +
+  
+  # receiver locations
   geom_point(data = stations,
-             aes(x = X, y = Y), 
+               aes(x = X, y = Y), 
              shape = 21, fill = "#F3B356", colour = "#EA7A1E",
              alpha = 0.8) +
   # you could switch these points out for buffers (use sf::st_buffer)
@@ -365,8 +375,8 @@ animation <- ggplot() +
 
 gganimate::anim_save(here::here("animations", "example-animation.gif"),
           animation = animation,
-          width = 12, height = 12, units = "cm", 
-          res = 200, nframes = 100,
+          width = 8, height = 8, units = "cm", 
+          res = 50, nframes = 50,
           bg = "transparent")
 # to initially check that the animation code works, I will run a low res version with fewer frames, and then increase to res = 300 (or even 600) DPI, nframes = 200 (20 second video with 600 dpi). For shorter datasets like this one (less than a month), 100 frames can be sufficient.
 
