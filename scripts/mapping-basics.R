@@ -14,24 +14,23 @@ library(patchwork)
 library(rnaturalearth)
 
 # load data
-data <- readRDS(here::here("data", "data.RDS"))
-# basemap of Nova Scotia and New Brunswick
-nova.scotia <- data$nova_scotia
+bc.coast <- readRDS("data/bc-coast.RDS")
 
 ## 1. Simple study area map, including inset
 study.area <- ggplot() +
-  geom_sf(data = nova.scotia, linewidth = 0.1) +
+  geom_sf(data = bc.coast, linewidth = 0.1) +
   
-  # label provinces/states
-  annotate(geom = "text", x = -62.8, y = 45.3, label = "Nova\nScotia",
-           lineheight = 0.9) +
-  annotate(geom = "text", x = -66, y = 46.3, label = "New\nBrunswick",
-           lineheight = 0.9) +
-  annotate(geom = "text", x = -69, y = 44.93, label = "Maine") +
+  # label areas of interest
+  annotate(geom = "text",
+           x = -125.65, y = 49.7, 
+           label = "Vancouver\nIsland",
+           size = 4.2, lineheight = 0.75, colour = "black") +
   
-  # label ocean
-  annotate(geom = "text", x = -62, y = 44.2, label = "Atlantic Ocean",
-           fontface = "italic", colour = "dodgerblue") +
+  annotate(geom = "text",
+           x = -127, y = 48.6,
+           label = "Pacific Ocean",
+           fontface = "italic",
+           size = 4.2, colour = "steelblue") +
   
   # add scale bar
   annotation_scale(width_hint = 0.35, style = "bar",
@@ -43,9 +42,9 @@ study.area <- ggplot() +
                          height = unit(0.9, "cm"), width = unit(0.6, "cm"),
                          which_north = "true") +
 
-  coord_sf(expand = FALSE) +
-  scale_y_continuous(breaks = c(44, 45, 46, 47)) +
-  
+  coord_sf(xlim = c(-129.2, -121.8), ylim = c(47.8, 51.7),
+           expand = FALSE) +
+
   theme_bw() +
   theme(panel.grid = element_blank(),
         axis.text = element_text(size = 12))
@@ -54,19 +53,16 @@ study.area
 ## 2. Add in an inset map ----
 
 # get broader area from RNaturalEarth
-north.america <- rnaturalearth::ne_countries(scale = "large",
+north.america <- rnaturalearth::ne_countries(scale = "medium",
   continent = "north america", returnclass = "sf")
-
-st_bbox(nova.scotia)
-
 inset <- ggplot() +
   geom_sf(data = north.america, linewidth = 0.2) +
   
-  annotate(geom = "rect", xmin = -70, xmax = -59.67305,
-           ymin = 43.39125, ymax = 47.5, fill = NA,
+  annotate(geom = "rect", xmin = -129.2, xmax = -121.8,
+           ymin = 47.8, ymax = 51.7, fill = NA,
            colour = "black", linewidth = 0.8) +
   
-  coord_sf(xlim = c(-100, -30), ylim = c(12, 70),
+  coord_sf(xlim = c(-178, -105), ylim = c(17, 66),
            expand = FALSE) +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
@@ -80,5 +76,7 @@ inset <- ggplot() +
         axis.ticks.length.x = unit(0,'pt'))
 inset
 
-study.area + inset_element(inset, left = -0.01, bottom = 0.50,
-                           right = 0.27, top = 1.00, align_to = "panel")
+study.area + inset_element(inset, left = 0.66, bottom = 0.620,
+                           right = 1.00, top = 1.00, align_to = "panel")
+ggsave("figures/bc-map.PNG",
+       width = 17, height = 12, units = "cm")
