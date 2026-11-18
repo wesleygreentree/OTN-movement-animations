@@ -1,3 +1,7 @@
+# Code to make a basic map of southwestern British Columbia
+
+# If you want to learn more, feel free to look at previous UVIC BUGS workshops
+# https://github.com/wesleygreentree/UVicBUGS-R-maps
 
 ## Set up ----
 
